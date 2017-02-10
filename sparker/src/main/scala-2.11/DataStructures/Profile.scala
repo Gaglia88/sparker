@@ -5,7 +5,7 @@ import scala.collection.mutable.MutableList;
  * Created by gio
  * on 07/12/16.
  */
-case class Profile(val id: Long, val attributes : MutableList[KeyValue] = new MutableList()) extends ProfileTrait with Serializable{
+case class Profile(val id: Long, val attributes : MutableList[KeyValue] = new MutableList(), val originalID : String = "") extends ProfileTrait with Serializable{
 
   /**
     * Add an attribute to the list of attributes

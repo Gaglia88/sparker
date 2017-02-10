@@ -7,7 +7,8 @@ import scala.collection.mutable.MutableList;
  */
 trait ProfileTrait {
   val id: Long
-  val attributes: MutableList[KeyValue] // todo define an object attribute (questa sarà una lista di attirbuti)
+  val attributes: MutableList[KeyValue]
+  val originalID : String
 
   /**
     * Given a key return the value concatenated by the space of all attributes with that key
