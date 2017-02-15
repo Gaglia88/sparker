@@ -19,19 +19,19 @@ object Main {
     val purgingRatio = 1.000
     val filteringRatio = 0.8
 
-
+/*
     val memoryHeap = args(0)
     val memoryStack = args(1)
     val pathDataset1 = args(2)
     val pathDataset2 = args(3)
-    val pathGt = args(4)
+    val pathGt = args(4)*/
 
 
-    /*val memoryHeap = 15
+    val memoryHeap = 15
     val memoryStack = 5
     val pathDataset1 = "C:/Users/Luca/Desktop/UNI/BlockingFramework/datasets/movies/profiles/dataset1"
     val pathDataset2 = "C:/Users/Luca/Desktop/UNI/BlockingFramework/datasets/movies/profiles/dataset2"
-    val pathGt = "C:/Users/Luca/Desktop/UNI/BlockingFramework/datasets/movies/groundtruth"*/
+    val pathGt = "C:/Users/Luca/Desktop/UNI/BlockingFramework/datasets/movies/groundtruth"
 
 
     println("Heap "+memoryHeap+"g")
@@ -135,7 +135,7 @@ object Main {
 
     //val edges = WNPCBSFor.WNP(profileBlocksFiltered,  blockIndex, maxProfileID.toInt, separatorID).map(e => (e.firstProfileID, e.secondProfileID))
     //val numEdges = WNPCBSFor.WNP3(profileBlocksFiltered,  blockIndex, maxProfileID.toInt, separatorID).sum()
-    val edgesAndCount = WNPCBSFor.WNP4(profileBlocksFiltered, blockIndex, maxProfileID.toInt, separatorID, gt)
+    val edgesAndCount = WNPCBSFor.WNP5(profileBlocksFiltered, blockIndex, maxProfileID.toInt, separatorID, gt)
 
     edgesAndCount.cache()
     val numEdges = edgesAndCount.map(_._1).sum()

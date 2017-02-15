@@ -7,6 +7,7 @@ import org.apache.spark.rdd.RDD
 /**
   * Created by Luca on 24/01/2017.
   * Weight Node Pruning with CBS
+  * Experimental, we have to finish this class
   */
 object WNPCBSFor {
 
@@ -211,20 +212,20 @@ object WNPCBSFor {
             localMax = 0
             cont
 
-            /*if(numeroVicini > 0){
-              val pesi = for(i <- 0 to numeroVicini-1) yield {
-                val p = arrayPesi(arrayVicini(i))
-                arrayPesi.update(arrayVicini(i), 0)
-                p
-              }
-
-              numeroVicini = 0
-
-              pesi.filter(_ >= pesi.max.toFloat/2.0).size
+          /*if(numeroVicini > 0){
+            val pesi = for(i <- 0 to numeroVicini-1) yield {
+              val p = arrayPesi(arrayVicini(i))
+              arrayPesi.update(arrayVicini(i), 0)
+              p
             }
-            else{
-              0
-            }*/
+
+            numeroVicini = 0
+
+            pesi.filter(_ >= pesi.max.toFloat/2.0).size
+          }
+          else{
+            0
+          }*/
         }
     }
   }
@@ -234,20 +235,20 @@ object WNPCBSFor {
       partition =>
 
         val arrayPesi = Array.fill[Int](maxID+1){0}             //Usato per memorizzare i pesi di ogni vicino
-        val arrayFound = Array.fill[Boolean](maxID+1){false}    //Usato per dire se ho già trovato il match di un certo elemento
-        val arrayVicini = Array.ofDim[Int](maxID+1)             //Usato per tenere gli ID dei miei vicini
-        var numeroVicini = 0                                    //Memorizza il numero di vicini che ho
-        var localMax = 0                                        //Memorizza il massimo locale
+      val arrayFound = Array.fill[Boolean](maxID+1){false}    //Usato per dire se ho già trovato il match di un certo elemento
+      val arrayVicini = Array.ofDim[Int](maxID+1)             //Usato per tenere gli ID dei miei vicini
+      var numeroVicini = 0                                    //Memorizza il numero di vicini che ho
+      var localMax = 0                                        //Memorizza il massimo locale
 
         partition map{                                                    //Mappo gli elementi contenuti nella partizione sono: [id profilo, blocchi]
           pb =>
             val profileID = pb.profileID                                  //ID PROFILO
-            val blocchiInCuiCompare = pb.blocks                           //Blocchi in cui compare questo profilo
+          val blocchiInCuiCompare = pb.blocks                           //Blocchi in cui compare questo profilo
 
             blocchiInCuiCompare foreach {                                 //Per ognuno dei blocchi in cui compare
               block =>
                 val idBlocco = block.blockID                              //ID BLOCCO
-                val profiliNelBlocco = blockIndex.value.get(idBlocco)     //Leggo gli ID di tutti gli altri profili che sono in quel blocco
+              val profiliNelBlocco = blockIndex.value.get(idBlocco)     //Leggo gli ID di tutti gli altri profili che sono in quel blocco
                 if(profiliNelBlocco.isDefined){
                   val profiliCheContiene = {
                     if(separatorID >= 0 && profileID <= separatorID){     //Se siamo in un contesto clean e l'id del profilo appartiene al dataset1, i suoi vicini sono nel dataset2
@@ -261,7 +262,7 @@ object WNPCBSFor {
                   profiliCheContiene foreach {                            //Per ognuno dei suoi vicini in questo blocco
                     secondProfileID =>
                       val vicino = secondProfileID.toInt                  //ID del vicino
-                      val pesoAttuale = arrayPesi(vicino)                 //Leggo il peso attuale che ha questo vicino
+                    val pesoAttuale = arrayPesi(vicino)                 //Leggo il peso attuale che ha questo vicino
                       if(pesoAttuale == 0){                               //Se è 0 vuol dire che non l'avevo mai trovato prima
                         arrayVicini.update(numeroVicini, vicino)          //Aggiungo all'elenco dei vicini questo nuovo vicino
                         arrayPesi.update(vicino, 1)                       //Aggiorno il suo peso ad 1
@@ -280,7 +281,7 @@ object WNPCBSFor {
 
 
             var cont = 0                                                //Contatore che legge quanti vicini mantengo
-            val soglia = localMax.toFloat/2.0                           //Soglia di pruning, max/2
+          val soglia = localMax.toFloat/2.0                           //Soglia di pruning, max/2
 
             var perfectMatchEdge : UnweightedEdge = null                  //Edge che verrà dato in uscita per questo profilo che corrisponde ad un match nel dataset 2 (solo se lo trova), va bene solo se clean sto metodo!
 
@@ -289,7 +290,7 @@ object WNPCBSFor {
                 cont += 1                                               //Incremento il contatore che mi dice quanti vicini ho mantenuto
                 if(!arrayFound(profileID.toInt)){                       //Guardo se ho già trovato un match per questo profilo, se non l'ho trovato proseguo
                   if(profileID < arrayVicini(i)) {                      //Il groundtruth è organizzato come (ID dataset1, ID dataset2), quindi devo cercare il profilo con ID minore
-                    val m = groundtruth.value.get(profileID)            //Guardo se ho questo ID
+                  val m = groundtruth.value.get(profileID)            //Guardo se ho questo ID
                     if(m.isDefined && m.get == arrayVicini(i)){         //Se l'id c'è e il suo profilo che matcha è uguale a questo, allora ho trovato il match
                       perfectMatchEdge = UnweightedEdge(profileID, arrayVicini(i)) //Genero l'edge che voglio tenere
                       arrayFound.update(profileID.toInt, true)          //Setto nell'elenco che ho trovato il match per il profilo
@@ -297,7 +298,7 @@ object WNPCBSFor {
                     }
                   }
                   else{                                                 //Stessa cosa di sopra ma girata
-                    val m = groundtruth.value.get(arrayVicini(i))
+                  val m = groundtruth.value.get(arrayVicini(i))
                     if(m.isDefined && m.get == profileID) {
                       perfectMatchEdge = UnweightedEdge(arrayVicini(i), profileID)
                       arrayFound.update(profileID.toInt, true)
@@ -312,6 +313,92 @@ object WNPCBSFor {
 
             numeroVicini = 0                                            //Resetto numero di vicini
             localMax = 0                                                //Resetto massimo locale
+
+            (cont.toDouble, perfectMatchEdge)                           //Fornisco in output il numero di vicini mantenuto e il match vero
+        }
+    }
+  }
+
+  def WNP5(profileBlocksFiltered : RDD[ProfileBlocks],  blockIndex : Broadcast[scala.collection.Map[Long, (List[Long], List[Long])]], maxID : Int, separatorID : Long, groundtruth : Broadcast[scala.collection.Map[Long, Long]]) : RDD[(Double, UnweightedEdge)] = {
+    profileBlocksFiltered mapPartitions{
+      partition =>
+
+        val arrayPesi = Array.fill[Int](maxID+1){0}             //Usato per memorizzare i pesi di ogni vicino
+      val arrayFound = Array.fill[Boolean](maxID+1){false}    //Usato per dire se ho già trovato il match di un certo elemento
+      val arrayVicini = Array.ofDim[Int](maxID+1)             //Usato per tenere gli ID dei miei vicini
+      var numeroVicini = 0                                    //Memorizza il numero di vicini che ho
+      var pesoTotale = 0                                      //Memorizza il complessivo locale
+
+        partition map{                                                    //Mappo gli elementi contenuti nella partizione sono: [id profilo, blocchi]
+          pb =>
+            val profileID = pb.profileID                                  //ID PROFILO
+          val blocchiInCuiCompare = pb.blocks                           //Blocchi in cui compare questo profilo
+
+            blocchiInCuiCompare foreach {                                 //Per ognuno dei blocchi in cui compare
+              block =>
+                val idBlocco = block.blockID                              //ID BLOCCO
+              val profiliNelBlocco = blockIndex.value.get(idBlocco)     //Leggo gli ID di tutti gli altri profili che sono in quel blocco
+                if(profiliNelBlocco.isDefined){
+                  val profiliCheContiene = {
+                    if(separatorID >= 0 && profileID <= separatorID){     //Se siamo in un contesto clean e l'id del profilo appartiene al dataset1, i suoi vicini sono nel dataset2
+                      profiliNelBlocco.get._2
+                    }
+                    else{
+                      profiliNelBlocco.get._1                             //Altrimenti sono nel dataset1
+                    }
+                  }
+
+                  profiliCheContiene foreach {                            //Per ognuno dei suoi vicini in questo blocco
+                    secondProfileID =>
+                      val vicino = secondProfileID.toInt                  //ID del vicino
+                    val pesoAttuale = arrayPesi(vicino)                 //Leggo il peso attuale che ha questo vicino
+                      pesoTotale +=1                                      //Incremento il peso totale
+                      if(pesoAttuale == 0){                               //Se è 0 vuol dire che non l'avevo mai trovato prima
+                        arrayVicini.update(numeroVicini, vicino)          //Aggiungo all'elenco dei vicini questo nuovo vicino
+                        arrayPesi.update(vicino, 1)                       //Aggiorno il suo peso ad 1
+                        numeroVicini = numeroVicini+1                     //Incremento il numero di vicini
+                      }
+                      else{
+                        arrayPesi.update(vicino, pesoAttuale+1)           //Altrimenti lo avevo già trovato, allora incremento di 1 il numero di volte in cui l'ho trovato (il suo peso)
+                      }
+                  }
+                }
+            }
+
+
+            var cont = 0                                                //Contatore che legge quanti vicini mantengo
+          val soglia = pesoTotale.toFloat/numeroVicini.toFloat          //Soglia di pruning, media
+
+            var perfectMatchEdge : UnweightedEdge = null                  //Edge che verrà dato in uscita per questo profilo che corrisponde ad un match nel dataset 2 (solo se lo trova), va bene solo se clean sto metodo!
+
+            for(i <- 0 to numeroVicini-1) {                             //Scorro i vicini che ho trovato
+              if(arrayPesi(arrayVicini(i)) >= soglia){                  //Questo vicino ha un peso superiore della soglia
+                cont += 1                                               //Incremento il contatore che mi dice quanti vicini ho mantenuto
+                if(!arrayFound(profileID.toInt)){                       //Guardo se ho già trovato un match per questo profilo, se non l'ho trovato proseguo
+                  if(profileID < arrayVicini(i)) {                      //Il groundtruth è organizzato come (ID dataset1, ID dataset2), quindi devo cercare il profilo con ID minore
+                  val m = groundtruth.value.get(profileID)            //Guardo se ho questo ID
+                    if(m.isDefined && m.get == arrayVicini(i)){         //Se l'id c'è e il suo profilo che matcha è uguale a questo, allora ho trovato il match
+                      perfectMatchEdge = UnweightedEdge(profileID, arrayVicini(i)) //Genero l'edge che voglio tenere
+                      arrayFound.update(profileID.toInt, true)          //Setto nell'elenco che ho trovato il match per il profilo
+                      arrayFound.update(arrayVicini(i), true)           //Stessa cosa per il suo compagno
+                    }
+                  }
+                  else{                                                 //Stessa cosa di sopra ma girata
+                  val m = groundtruth.value.get(arrayVicini(i))
+                    if(m.isDefined && m.get == profileID) {
+                      perfectMatchEdge = UnweightedEdge(arrayVicini(i), profileID)
+                      arrayFound.update(profileID.toInt, true)
+                      arrayFound.update(arrayVicini(i), true)
+                    }
+                  }
+                }
+              }
+
+              arrayPesi.update(arrayVicini(i), 0)                       //Il peso di questo vicino non mi serve più, lo resetto per il prossimo giro
+            }
+
+            numeroVicini = 0                                            //Resetto numero di vicini
+            pesoTotale = 0                                              //Resetto il peso totale
 
             (cont.toDouble, perfectMatchEdge)                           //Fornisco in output il numero di vicini mantenuto e il match vero
         }

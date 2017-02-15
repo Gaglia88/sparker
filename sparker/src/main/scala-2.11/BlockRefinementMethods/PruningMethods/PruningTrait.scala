@@ -4,11 +4,13 @@ import DataStructures.WeightedEdge
 import org.apache.spark.rdd.RDD
 
 /**
-  * Created by Luca on 09/12/2016.
+  * Pruning trait
+  * @author Luca Gagliardelli
+  * @since 2016/09/12
   */
 trait PruningTrait {
   /**
-    * Applies pruning on an RDD of undirectional unweighted edges
+    * Applies the pruning on an RDD of undirected weighted edges
     * */
   def pruning(weightedEdges : RDD[WeightedEdge]) : RDD[WeightedEdge]
 }

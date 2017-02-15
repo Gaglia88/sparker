@@ -4,10 +4,11 @@ import DataStructures.WeightedEdge
 import org.apache.spark.rdd.RDD
 
 /**
-  * Created by Luca on 09/12/2016.
   * Cardinality Edge Pruning
   * Keeps the top K edges
   * K is calculated as floor(sum of the total number of profiles in all blocks / 2)
+  * @author Song Zhu
+  * @since 2016/12/09
   */
 class CEP(totalMaxCardinality: Long) extends Serializable with PruningTrait{
 

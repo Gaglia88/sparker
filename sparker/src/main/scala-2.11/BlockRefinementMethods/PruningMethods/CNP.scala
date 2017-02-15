@@ -8,9 +8,9 @@ import scala.collection.immutable.TreeSet
 
 
 /**
-  * Created by Luca on 09/12/2016.
-  *
   * Cardinality Node Pruning
+  * @author Song Zhu
+  * @since 2016/12/09
   */
 object CNP extends PruningTrait{
 

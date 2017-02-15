@@ -2,8 +2,9 @@ package DataStructures
 import scala.collection.mutable.MutableList;
 
 /**
- * Created by gio
- * on 07/12/16.
+ * Represents a profile
+ * @author Giovanni Simonini
+ * @since 2016/07/12
  */
 case class Profile(val id: Long, val attributes : MutableList[KeyValue] = new MutableList(), val originalID : String = "") extends ProfileTrait with Serializable{
 

@@ -1,10 +1,8 @@
 package DataStructures
 
 /**
-  * Created by Luca on 08/12/2016.
-  *
   * Maps a profile with the blocks in which it is contained
+  * @author Luca Gagliardelli
+  * @since 2016/12/08
   */
-case class ProfileBlocks(profileID : Long, blocks : List[BlockWithComparisonSize]) extends Serializable{
-
-}
+case class ProfileBlocks(profileID : Long, blocks : List[BlockWithComparisonSize]) extends Serializable{}

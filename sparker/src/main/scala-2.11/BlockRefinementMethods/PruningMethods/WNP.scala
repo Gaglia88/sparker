@@ -4,12 +4,14 @@ import DataStructures.WeightedEdge
 import org.apache.spark.rdd.RDD
 
 /**
-  * Created by Luca on 09/12/2016.
   *
   * Weighted Node Pruning
   *
   * For each Node (Profile) keeps only the edges that have a weight equal or above than the average weight of the
   * node edges
+  *
+  * @author Luca Gagliardelli
+  * @since 2016/12/09
   */
 object WNP extends PruningTrait{
 
@@ -41,15 +43,18 @@ object WNP extends PruningTrait{
 
   /**
     * Pruning the edges
-    * WNPType specify the type of WNP, WNP types are listed in the WNPTypes object.
+    *
+    * @param weightedEdges undirected weighted edges
+    * @param WNPType type of WNP as listed in the WNPTypes object
+    * @param retainType metric to use for calculate the threshold as listed in the retainEdgesTypes object
     * */
   def pruning(weightedEdges : RDD[WeightedEdge], WNPType : String, retainType : String = retainEdgesTypes.AVG) : RDD[WeightedEdge] = {
-    //I need to create the directed edges
+    //Creates the directed edges
     val directedWeightedEdges = weightedEdges.map(e => (e.firstProfileID, e)).union(weightedEdges.map(e => (e.secondProfileID, e)))
     //For each node (Profile) I obtain the list of its edges
     val edgesPerNode = directedWeightedEdges.groupByKey()
 
-    //For each node I keep only the edges tha have a weight equal or above than the average weight
+    //For each node keeps only the edges that have a weight equal or above than the average weight
     val retainedEdges = edgesPerNode flatMap {
       nodeWithEdges =>
         val nodeEdges = nodeWithEdges._2

@@ -1,9 +1,10 @@
 package DataStructures
 
 /**
-  * Created by Luca on 09/12/2016.
-  *
   * Represents two matching entities
+  *
+  * @author Luca Gagliardelli
+  * @since 2016/12/09
   */
 case class MatchingEntities(val firstEntityID : String, val secondEntityID : String) {
 

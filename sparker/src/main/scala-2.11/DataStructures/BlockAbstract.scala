@@ -4,27 +4,28 @@ import WeightingMethods.WeightMethodTrait
 import org.apache.spark.broadcast.Broadcast
 
 /**
- * Created by gio
- * on 07/12/16.
+ * Represents a generic block.
+ * @author Giovanni Simonini
+ * @since 2016/12/07
  */
 trait BlockAbstract  extends Ordered[BlockAbstract]{
-
+  /** Id of the block */
   val blockID : Long
-
+  /** Entropy of the block */
   var entropy : Double
-
+  /** Id of the profiles contained in the block */
   val profiles: (List[Long], List[Long])
-  /*val datasetLimit: Long*/
 
-  // return the number of entities indexed in the block
+  /** Return the number of entities indexed in the block */
   def size = (profiles._1.size + profiles._2.size).toDouble
 
-  // return the number of comparisons entailed by this block
+  /* Return the number of comparisons entailed by this block */
   def getComparisonSize(): Double
 
-  // return an iterator of the comparisons
+  /* Return the comparisons contained in the block */
   def getComparisons(): List[UnweightedEdge] {}
 
+  //TODO: a cosa serve? mettere un commento
   def getComparison(p1: ProfileBlocks, p2: ProfileBlocks, weightMethod: WeightMethodTrait): WeightedEdge = {
 
     def getMinCommonBlock(b1: List[BlockWithComparisonSize], b2: List[BlockWithComparisonSize]): Long = {
@@ -44,14 +45,20 @@ trait BlockAbstract  extends Ordered[BlockAbstract]{
     else null
   }
 
+  /**
+    * Returns the weighted comparison of the elements contained in this block
+    * @param profileBlocks broadcast variable that contains the list of profileBlocks
+    * @param weightMethod function to be used to weight the edges
+    * */
   def getWeightedComparisons(profileBlocks: Broadcast[Map[Long,ProfileBlocks]], weightMethod: WeightMethodTrait): List[WeightedEdge]
 
-  // CleanClean return true
+  /* CleanClean return true */
   def isBilateral(): Boolean {}
 
-  //Returns all profiles
+  /* Returns all profiles */
   def getAllProfiles = profiles._1.union(profiles._2)
 
+  /** Default comparator, blocks will be ordered by its comparison size */
   def compare(that : BlockAbstract) : Int = {
     this.getComparisonSize() compare that.getComparisonSize()
   }
