@@ -19,20 +19,11 @@ object Main {
     val purgingRatio = 1.000
     val filteringRatio = 0.8
 
-/*
     val memoryHeap = args(0)
     val memoryStack = args(1)
     val pathDataset1 = args(2)
     val pathDataset2 = args(3)
-    val pathGt = args(4)*/
-
-
-    val memoryHeap = 15
-    val memoryStack = 5
-    val pathDataset1 = "C:/Users/Luca/Desktop/UNI/BlockingFramework/datasets/movies/profiles/dataset1"
-    val pathDataset2 = "C:/Users/Luca/Desktop/UNI/BlockingFramework/datasets/movies/profiles/dataset2"
-    val pathGt = "C:/Users/Luca/Desktop/UNI/BlockingFramework/datasets/movies/groundtruth"
-
+    val pathGt = args(4)
 
     println("Heap "+memoryHeap+"g")
     println("Stack "+memoryStack+"g")
