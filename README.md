@@ -1,4 +1,4 @@
-# sparker
+# SparkER
 An Entity Resolution framework for Apache Spark.
 
 To any question you can contact:
