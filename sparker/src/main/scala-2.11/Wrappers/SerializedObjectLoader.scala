@@ -9,7 +9,7 @@ import org.apache.spark.rdd.RDD
   */
 object SerializedObjectLoader extends  WrapperTrait{
 
-  def loadProfiles(filePath : String, startIDFrom : Long = 0) : RDD[Profile] = {
+  def loadProfiles(filePath : String, startIDFrom : Long = 0, realFieldID : String = "") : RDD[Profile] = {
 
     val entities = DataLoaders.SerializedLoader.loadSerializedDataset(filePath)
 

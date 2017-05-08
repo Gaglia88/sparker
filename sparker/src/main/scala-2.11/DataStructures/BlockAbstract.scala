@@ -13,6 +13,8 @@ trait BlockAbstract  extends Ordered[BlockAbstract]{
   val blockID : Long
   /** Entropy of the block */
   var entropy : Double
+  /** Cluster */
+  var clusterID : Double
   /** Id of the profiles contained in the block */
   val profiles: (List[Long], List[Long])
 
@@ -47,10 +49,11 @@ trait BlockAbstract  extends Ordered[BlockAbstract]{
 
   /**
     * Returns the weighted comparison of the elements contained in this block
+    *
     * @param profileBlocks broadcast variable that contains the list of profileBlocks
     * @param weightMethod function to be used to weight the edges
     * */
-  def getWeightedComparisons(profileBlocks: Broadcast[Map[Long,ProfileBlocks]], weightMethod: WeightMethodTrait): List[WeightedEdge]
+  def getWeightedComparisons(profileBlocks: Broadcast[Map[Long, ProfileBlocks]], weightMethod: WeightMethodTrait): List[WeightedEdge]
 
   /* CleanClean return true */
   def isBilateral(): Boolean {}

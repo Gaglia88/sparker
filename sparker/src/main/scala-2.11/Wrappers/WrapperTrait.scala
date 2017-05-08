@@ -15,7 +15,7 @@ trait WrapperTrait {
   /**
     * Given a file path return an RDD of Profiles
     * */
-  def loadProfiles(filePath : String, startIDFrom : Long) : RDD[Profile]
+  def loadProfiles(filePath : String, startIDFrom : Long, realIDField : String) : RDD[Profile]
 
   /**
     * Given a file path return an RDD of EqualEntities

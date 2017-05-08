@@ -18,7 +18,7 @@ object JSONWrapper extends WrapperTrait{
     * The JSON must contains a JSONObject for each row, and the JSONObject must be in the form key: value
     * the value can be a single value or an array of values
     * */
-  def loadProfiles(filePath : String, startIDFrom : Long = 0) : RDD[Profile] = {
+  def loadProfiles(filePath : String, startIDFrom : Long = 0, realIDField : String = "") : RDD[Profile] = {
     val sparkSession = SparkSession.builder.getOrCreate()
     val df = sparkSession.read.json(filePath)
     val columnNames = df.columns
@@ -27,7 +27,16 @@ object JSONWrapper extends WrapperTrait{
       profile =>
         val profileID = profile._2 + startIDFrom
         val attributes = profile._1
-        Profile(profileID, attributes)
+        val realID = {
+          if(realIDField.isEmpty){
+            ""
+          }
+          else {
+            attributes.filter(_.key == realIDField).map(_.value).mkString("").trim
+          }
+        }
+
+        Profile(profileID, attributes.filter(kv => kv.key != realIDField), realID)
     }
   }
 

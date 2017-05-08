@@ -1,7 +1,7 @@
 package BlockRefinementMethods
 
 import DataStructures.{BlockWithComparisonSize, ProfileBlocks}
-import Utilities.BoundedPriorityQueue
+import Utilities.{BoundedPriorityQueue, BoundedPriorityQueue2}
 import org.apache.spark.rdd.RDD
 
 /**
@@ -21,7 +21,6 @@ object BlockFiltering {
     * @param profilesWithBlocks the RDD that contains each profile with the list of blocks in which appears
     * @param r blocking filter factor [0, 1], means the rate of blocks to keep for each profile
     * @param minCardinality minimum number of blocks to keep, the default is 1
-    *
     * @return profile block filtered
     **/
   def blockFiltering(profilesWithBlocks: RDD[ProfileBlocks], r: Double, minCardinality: Int = 1): RDD[ProfileBlocks] = {
@@ -34,6 +33,20 @@ object BlockFiltering {
         val blocksToKeep = new BoundedPriorityQueue[BlockWithComparisonSize](blocksNumberToKeep) //Creates a new priority queue of the size of the blocks to keeps
         blocksToKeep ++= profileWithBlocks.blocks //Adds all blocks to the queue, the bigger one will be automatically dropped
         ProfileBlocks(profileWithBlocks.profileID, blocksToKeep.toList) //Return the new blocks
+    }
+  }
+
+  def blockFiltering2(profilesWithBlocks: RDD[ProfileBlocks], r: Double, minCardinality: Int = 1): RDD[ProfileBlocks] = {
+    profilesWithBlocks mapPartitions {
+      partition =>
+        val blocksToKeep = new BoundedPriorityQueue2[BlockWithComparisonSize](1) //Creates a new priority queue
+        partition.map{
+          profileWithBlocks =>
+            val blocksNumberToKeep = math.max(Math.round(profileWithBlocks.blocks.size * r).toInt, minCardinality)//Calculates the number of blocks to keep
+            blocksToKeep.resize(blocksNumberToKeep) //Set the number of elements to keep to the priority queue
+            blocksToKeep ++= profileWithBlocks.blocks //Adds all blocks to the queue, the bigger one will be automatically dropped
+            ProfileBlocks(profileWithBlocks.profileID, blocksToKeep.toList) //Return the new blocks
+        }
     }
   }
 }

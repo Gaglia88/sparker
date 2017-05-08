@@ -14,8 +14,8 @@ object FileLoaders {
   final val jsonRDDWrapper = "JSONR"
   final val serializedWrapper = "SER"
 
-  def loadProfiles(filename : String, startIDFrom : Long = 0, wrapper: String = serializedWrapper) : RDD[Profile] =
-    getWrapper(wrapper).loadProfiles(filename, startIDFrom)
+  def loadProfiles(filename : String, startIDFrom : Long = 0, wrapper: String = serializedWrapper, realIDField : String = "") : RDD[Profile] =
+    getWrapper(wrapper).loadProfiles(filename, startIDFrom, realIDField)
 
   def loadGroundTruth(filename : String, wrapper: String = serializedWrapper) : RDD[MatchingEntities] =
     getWrapper(wrapper).loadGroundtruth(filename)

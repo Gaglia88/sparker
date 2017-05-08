@@ -24,7 +24,7 @@ object SerializedProfilesLoader {
     val profiles = sc.union(data.grouped(chunkSize).map(sc.parallelize(_)).toArray)
 
     if(startIDFrom > 0){
-      profiles.map(p => Profile(p.id+startIDFrom, p.attributes))
+      profiles.map(p => Profile(p.id+startIDFrom, p.attributes, p.originalID))
     }
     else{
       profiles

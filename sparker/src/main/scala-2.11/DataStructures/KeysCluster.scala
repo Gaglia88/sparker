@@ -8,4 +8,4 @@ package DataStructures
   * @author Luca Gagliardelli
   * @since 14/02/2017.
   */
-case class KeysCluster(id : Int, keys: List[String], entropy : Double = -1){}
+case class KeysCluster(id : Int, keys: List[String], entropy : Double = 1, filtering : Double = 0.8){}

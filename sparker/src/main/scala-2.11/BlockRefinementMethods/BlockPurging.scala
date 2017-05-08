@@ -66,7 +66,12 @@ object BlockPurging {
     }
 
     out.toList*/
-    input.tail.scanLeft(input.head)((acc, x) => (x._1, (x._2._1+acc._2._1, x._2._2+acc._2._2)))
+    if(input.isEmpty){
+      input
+    }
+    else{
+      input.tail.scanLeft(input.head)((acc, x) => (x._1, (x._2._1+acc._2._1, x._2._2+acc._2._2)))
+    }
   }
 
   /**

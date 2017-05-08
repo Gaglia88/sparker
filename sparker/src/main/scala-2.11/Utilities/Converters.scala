@@ -5,11 +5,19 @@ import DataStructures._
 import org.apache.spark.partial.PartialResult
 
 /**
-  * Created by Luca on 08/12/2016.
+  * Contains differents methods
+  * to convert to differents DataStructures types.
+  *
+  * @author Luca Gagliardelli
+  * @since 2016/12/08
   */
 object Converters {
+
   /**
     * Given a RDD of blocks return a RDD of profiles block
+ *
+    * @param blocks RDD of blocks
+    * @return RDD of profile blocks
     * */
   def blocksToProfileBlocks(blocks : RDD[BlockAbstract]) : RDD[ProfileBlocks] = {
     //val createCombiner = (blockWithComparisonSize: BlockWithComparisonSize) => List(blockWithComparisonSize)
@@ -31,8 +39,13 @@ object Converters {
     profilesPerBlocks map(x => ProfileBlocks(x._1, x._2))
   }
 
+  /**
+    * Given a RDD of blocks, for each profile returns (profileID, [blocks in which appears])
+    *
+    * @param blocks RDD of blocks
+    * @return for each profile in the blocks return (profileID, [blocks in which appears])
+    * */
   def blocksToProfileRealBlocks(blocks : RDD[BlockAbstract]) : RDD[(Long, Array[BlockAbstract])] = {
-
     def combiner(partialResult: Array[BlockAbstract], newElement: BlockAbstract) : Array[BlockAbstract] =
       partialResult :+ newElement
 
@@ -50,6 +63,7 @@ object Converters {
     * Given a block return for each profile the tuple (profile ID, block ID)
     *
     * @param block generic block
+    * @return a list that contains for each profile in the block (profileID, block)
     * */
   def ProfileIDFromBlock(block : BlockAbstract) : Iterable[(Long, BlockAbstract)] = {
     block.getAllProfiles.map((_, block))
@@ -72,8 +86,12 @@ object Converters {
 
   /**
     * Given a RDD of profiles block return a RDD of blocks
+ *
+    * @param profilesBlocks RDD of profileBlock
+    * @param separatorID max ID of the first dataset (if it is clean-clean context), default -1
+    * @return RDD of blocks
     * */
-  def profilesBlockToBlocks(profilesBlocks : RDD[ProfileBlocks], maxID : Long = -1) : RDD[BlockAbstract] = {
+  def profilesBlockToBlocks(profilesBlocks : RDD[ProfileBlocks], separatorID : Long = -1) : RDD[BlockAbstract] = {
     val blockIDProfileID = profilesBlocks flatMap {
       profileWithBlocks =>
         val profileID = profileWithBlocks.profileID
@@ -88,11 +106,11 @@ object Converters {
         val blockID = block._1
         val profilesID = block._2.toList
 
-        if(maxID < 0){
+        if (separatorID < 0){
           BlockDirty(blockID, (profilesID, Nil))
         }
         else{
-          BlockClean(blockID, (profilesID.partition(_ <= maxID)))
+          BlockClean(blockID, (profilesID.partition(_ <= separatorID)))
         }
     }
 
@@ -101,15 +119,14 @@ object Converters {
   }
 
   /**
-    * Given a block return for each profile the tuple (profile ID, block ID)
+    * Given a block return a list that contains for each profile in the block (profileID, (blockID, number of comparison in the block))
     *
-    * @param block generic block
+    * @param block block
+    * @return a list that contains for each profile in the block (profileID, (blockID, number of comparison in the block))
     * */
   def blockIDProfileIDFromBlock(block : BlockAbstract) : Iterable[(Long, BlockWithComparisonSize)] = {
     val blockWithComparisonSize = BlockWithComparisonSize(block.blockID, block.getComparisonSize())
+    //val blockWithComparisonSize = BlockWithComparisonSize(block.blockID, block.getComparisonSize()/Math.pow(10000000, block.entropy))
     block.getAllProfiles.map((_, blockWithComparisonSize))
-    //block.getAllProfiles.map((_, BlockWithComparisonSize(block.blockID, block.getComparisonSize().toDouble/block.entropy)))
-    //block.getAllProfiles.map((_, BlockWithComparisonSize(block.blockID, block.getComparisonSize().toDouble*block.entropy)))
-    //block.getAllProfiles.map((_, BlockWithComparisonSize(block.blockID, block.entropy)))
   }
  }
