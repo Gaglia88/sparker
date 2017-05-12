@@ -197,7 +197,7 @@ object TokenBlocking {
     */
   def createBlocksCluster(profiles : RDD[Profile], separatorID: Long, clusters : List[KeysCluster], keysToExclude : Iterable[String] = Nil) : RDD[BlockAbstract] = {
     /** Obtains the ID of the default cluster: all the elements that are not in other clusters finish in this one */
-    val defaultClusterID = clusters.filter(_.keys.contains(LSHTwitterOld.Settings.DEFAULT_CLUSTER_NAME)).head.id
+    val defaultClusterID = clusters.filter(_.keys.contains(LSHTwitter.Settings.DEFAULT_CLUSTER_NAME)).head.id
     /** Creates a map that contains the entropy for each cluster */
     val entropies = clusters.map(cluster => (cluster.id, cluster.entropy)).toMap
     /** Creates a map that map each key of a cluster to it id */
@@ -207,7 +207,7 @@ object TokenBlocking {
     val tokensPerProfile = profiles.map{
       profile =>
         /* Calculates the dataset to which this token belongs */
-        val dataset = if(profile.id > separatorID) LSHTwitterOld.Settings.FIRST_DATASET_PREFIX else LSHTwitterOld.Settings.SECOND_DATASET_PREFIX
+        val dataset = if(profile.id > separatorID) LSHTwitter.Settings.FIRST_DATASET_PREFIX else LSHTwitter.Settings.SECOND_DATASET_PREFIX
 
         /* Generates the tokens for this profile */
         val tokens = profile.attributes.flatMap{

@@ -93,6 +93,7 @@ object LSHTwitter {
         attributes.flatMap {
           kv =>
             kv.value.split(BlockingUtils.TokenizerPattern.DEFAULT_SPLITTING).filter(_.trim.size > 0).map((dataset + kv.key, _))
+            //kv.value.split("(\\s|\\p{Punct})+")/*.filter(_.trim.size > 0)*/.map((dataset + kv.key, _))
         }
     }
 
@@ -207,12 +208,16 @@ object LSHTwitter {
       }
     }
 
+
+
+
     /** Generates a map to obain the cluster ID given an attribute */
     val keyClusterMap = clusters.flatMap {
       case (attributes, clusterID) =>
         attributes.map(attribute => (attribute, clusterID))
     }.toMap
 
+    /*
     /** Assign the tokens to each cluster */
     val keysPerCluster = attributesToken.map {
       case (attribute, tokens) =>
@@ -229,7 +234,7 @@ object LSHTwitter {
     val profileNumber = profiles.count().toDouble
 
     /** Calculates the entropy for each cluster */
-    val entropyPerCluster = keysPerCluster.groupByKey() map {
+    val entropyPerCluster = keysPerCluster.groupByKey().map {
       case (clusterID, tokens) =>
         val numberOfTokens = tokens.size.toDouble
         val numberOfDistinctTokens = tokens.toList.distinct.size.toDouble
@@ -256,7 +261,56 @@ object LSHTwitter {
           }
         }
         (clusterID, entropy)
+    }*/
+
+    val normalizeEntropy = false
+    val profileNumber = profiles.count().toDouble
+
+    /** Calculates the entropy for each cluster */
+    val entropyPerAttribute = attributesToken.groupByKey().map {
+      case (attribute, tokens) =>
+        val numberOfTokens = tokens.size.toDouble
+        //val numberOfDistinctTokens = tokens.toList.distinct.size.toDouble
+        //val entropy = -tokens.groupBy(x => x).map(x => (x._2.size)).map(s => (s / numberOfTokens) * Math.log(s.toDouble / numberOfTokens)).sum // numberOfTokens
+
+        //val entropy = Math.pow(1/Math.abs(Math.log10(profileNumber/numberOfDistinctTokens)), 10)
+        //val entropy = Math.pow(2, 1/Math.pow((1-(profileNumber/numberOfDistinctTokens)), 2))
+        //val entropy = Math.pow(10, (1/Math.abs(Math.log10(profileNumber/numberOfDistinctTokens))))
+        //val entropy = 1/ Math.log(profileNumber/numberOfDistinctTokens)
+
+        val tokensCount = tokens.groupBy(x => x).map(x => (x._2.size))
+        val tokensP = tokensCount.map{
+          tokenCount =>
+            val p_i : Double = tokenCount/numberOfTokens
+            (p_i * (Math.log10(p_i) / Math.log10(2.0d)))
+        }
+
+        val entropy = {
+          if(normalizeEntropy){
+            -tokensP.sum / (Math.log10(numberOfTokens) / Math.log10(2.0d))
+          }
+          else{
+            -tokensP.sum
+          }
+        }
+        (attribute, entropy)
     }
+
+
+    entropyPerAttribute.collect().foreach(println)
+
+
+    /** Assign the tokens to each cluster */
+    val entropyPerCluster = entropyPerAttribute.map {
+      case (attribute, entropy) =>
+        val clusterID = keyClusterMap.get(attribute) //Obain the cluster ID
+        if (clusterID.isDefined) {//If is defined assigns the tokens to this cluster
+          (clusterID.get, entropy)
+        }
+        else {//Otherwise the tokens will be assigned to the default cluster
+          (defaultClusterID, entropy)
+        }
+    }.groupByKey().map(x => (x._1, (x._2.sum/x._2.size)))
 
     /** A map that contains the cluster entropy for each cluster id */
     val entropyMap = entropyPerCluster.collectAsMap()
