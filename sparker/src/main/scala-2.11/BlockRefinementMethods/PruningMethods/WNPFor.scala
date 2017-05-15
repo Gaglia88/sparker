@@ -586,7 +586,7 @@ object WNPFor {
           //val threshold = (thresholds.value(neighbours(i))+nodeThreshold)/2
           val threshold = Math.sqrt(Math.pow(thresholds.value(neighbours(i)), 2)+Math.pow(nodeThreshold, 2))/4.0
 
-          if(localWeights(neighbours(i)) >= threshold){//If the  neighbour has a weight greater than the threshold
+          if(localWeights(neighbours(i)) >= threshold && profileID < neighbours(i)){//If the  neighbour has a weight greater than the threshold
             cont += 1//Increments the counter that keep the number of keeped neighbours
             if(profileID < neighbours(i)) {//The groundtruth contains (ID dataset 1, ID dataset2), I have to look the profile with lower ID first
               if(groundtruth.value.contains((profileID, neighbours(i)))){//If this elements is in the groundtruth
