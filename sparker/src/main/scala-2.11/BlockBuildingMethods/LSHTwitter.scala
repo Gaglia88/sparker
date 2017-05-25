@@ -1,7 +1,6 @@
 package BlockBuildingMethods
 
 import java.util
-import java.util.Calendar
 
 import DataStructures._
 import com.twitter.algebird.{MinHashSignature, MinHasher, MinHasher32}
@@ -100,6 +99,8 @@ object LSHTwitter {
         }
     }
 
+    /*val a = attributesToken.groupByKey().map(x => (x._1,x._2.mkString("")))*/
+
     /* Hashes the tokens for each attribute and the groups them */
     val attributeWithHashes: RDD[(String, Iterable[MinHashSignature])] = attributesToken.map {
       case (attribute, tokens) =>
@@ -136,12 +137,22 @@ object LSHTwitter {
     }.groupByKey().filter(_._2.size > 1)
 
     /** Generates the clusters of attributes (attributes that are finished in the same bucket) */
+<<<<<<< Updated upstream
+=======
+<<<<<<< HEAD
+    val partialClusters = attributesPerBucket.map(_._2)/*.distinct()*/
+=======
+>>>>>>> Stashed changes
     val partialClusters = attributesPerBucket.map(_._2)
 
     partialClusters.count()
     attributeWithBuckets.unpersist()
     val t2 = Calendar.getInstance()
     log.info("SPARKER - Time to calculate couples (attr1, attr2, similarity) "+(t2.getTimeInMillis-t5.getTimeInMillis)+"ms")
+<<<<<<< Updated upstream
+=======
+>>>>>>> origin/master
+>>>>>>> Stashed changes
 
     /**
       * Generates edges between the different attributes in each cluster
@@ -163,7 +174,15 @@ object LSHTwitter {
           (x(0)._1, (x(1)._1, minHasher.similarity(x(0)._2, x(1)._2)))
         ).toList
       }
+<<<<<<< Updated upstream
     }//.distinct()
+=======
+<<<<<<< HEAD
+    }/*.distinct()*/
+=======
+    }//.distinct()
+>>>>>>> origin/master
+>>>>>>> Stashed changes
 
     /** Produces all the edges,
       * e.g if we have (attr1, (attr2, sim(a1,a2)) will also generates

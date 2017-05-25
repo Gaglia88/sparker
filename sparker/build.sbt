@@ -29,4 +29,4 @@ libraryDependencies += "org.apache.commons" % "commons-math3" % "3.6.1"
 libraryDependencies += "org.jgrapht" % "jgrapht-core" % "1.0.1"
 
 
-mainClass in Compile := Some("Experiments.Main")
+//mainClass in Compile := Some("Experiments.Main")
