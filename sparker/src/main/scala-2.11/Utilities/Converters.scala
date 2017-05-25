@@ -104,10 +104,10 @@ object Converters {
     val blocks = blockIDProfileID.groupByKey().filter(_._2.size > 1) map {
       block =>
         val blockID = block._1
-        val profilesID = block._2.toList
+        val profilesID = block._2.toSet
 
         if (separatorID < 0){
-          BlockDirty(blockID, (profilesID, Nil))
+          BlockDirty(blockID, (profilesID, Set.empty))
         }
         else{
           BlockClean(blockID, (profilesID.partition(_ <= separatorID)))

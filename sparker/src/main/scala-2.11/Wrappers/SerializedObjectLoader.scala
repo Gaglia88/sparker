@@ -10,9 +10,13 @@ import org.apache.spark.rdd.RDD
 object SerializedObjectLoader extends  WrapperTrait{
 
   def loadProfiles(filePath : String, startIDFrom : Long = 0, realFieldID : String = "") : RDD[Profile] = {
+    @transient lazy val log = org.apache.log4j.LogManager.getRootLogger
 
+    log.info("SPARKER - Start to loading entities")
     val entities = DataLoaders.SerializedLoader.loadSerializedDataset(filePath)
+    log.info("SPARKER - Loading ended")
 
+    log.info("SPARKER - Start to generate profiles")
     val profiles : Array[Profile] = new Array(entities.size())
 
     for(i <- 0 to entities.size()-1){
@@ -27,7 +31,9 @@ object SerializedObjectLoader extends  WrapperTrait{
 
       profiles.update(i, profile)
     }
+    log.info("SPARKER - Ended to loading profiles")
 
+    log.info("SPARKER - Start to parallelize profiles")
     val sc = SparkContext.getOrCreate()
 
     sc.union(profiles.grouped(10000).map(sc.parallelize(_)).toArray)

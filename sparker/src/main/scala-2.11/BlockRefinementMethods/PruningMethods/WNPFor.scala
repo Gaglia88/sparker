@@ -24,7 +24,7 @@ object WNPFor {
   }
 
   def WNP(profileBlocksFiltered : RDD[ProfileBlocks],//RDD(profile, [blocks ids])
-          blockIndex : Broadcast[scala.collection.Map[Long, (List[Long], List[Long])]],//(block id, ([dataset 1 blocks], [dataset 2 blocks])
+          blockIndex : Broadcast[scala.collection.Map[Long, (Set[Long], Set[Long])]],//(block id, ([dataset 1 blocks], [dataset 2 blocks])
           maxID : Int,//MaxProfileID
           separatorID : Long,//Separator ID
           groundtruth : Broadcast[scala.collection.immutable.Set[(Long, Long)]],//Groundtruth
@@ -66,7 +66,7 @@ object WNPFor {
   }
 
   def WNPArcs(profileBlocksFiltered : RDD[ProfileBlocks],
-              blockIndex : Broadcast[scala.collection.Map[Long, (List[Long], List[Long])]],
+              blockIndex : Broadcast[scala.collection.Map[Long, (Set[Long], Set[Long])]],
               maxID : Int,
               separatorID : Long,
               groundtruth : Broadcast[scala.collection.immutable.Set[(Long, Long)]],
@@ -212,7 +212,7 @@ object WNPFor {
   }
 
   def WNPJS(profileBlocksFiltered : RDD[ProfileBlocks],//RDD(profile, [blocks ids])
-             blockIndex : Broadcast[scala.collection.Map[Long, (List[Long], List[Long])]],//(block id, ([dataset 1 blocks], [dataset 2 blocks])
+             blockIndex : Broadcast[scala.collection.Map[Long, (Set[Long], Set[Long])]],//(block id, ([dataset 1 blocks], [dataset 2 blocks])
              maxID : Int,//MaxProfileID
              separatorID : Long,//Separator ID
              groundtruth : Broadcast[scala.collection.immutable.Set[(Long, Long)]],//Groundtruth
@@ -346,7 +346,7 @@ object WNPFor {
   }
 
   def WNPCBS(profileBlocksFiltered : RDD[ProfileBlocks],//RDD(profile, [blocks ids])
-             blockIndex : Broadcast[scala.collection.Map[Long, (List[Long], List[Long])]],//(block id, ([dataset 1 blocks], [dataset 2 blocks])
+             blockIndex : Broadcast[scala.collection.Map[Long, (Set[Long], Set[Long])]],//(block id, ([dataset 1 blocks], [dataset 2 blocks])
              maxID : Int,//MaxProfileID
              separatorID : Long,//Separator ID
              groundtruth : Broadcast[scala.collection.immutable.Set[(Long, Long)]],//Groundtruth
@@ -458,7 +458,7 @@ object WNPFor {
   
   
   def WNPChiSquare(profileBlocksFiltered : RDD[ProfileBlocks],
-                   blockIndex : Broadcast[scala.collection.Map[Long, (List[Long], List[Long])]],
+                   blockIndex : Broadcast[scala.collection.Map[Long, (Set[Long], Set[Long])]],
                    maxID : Int,
                    separatorID : Long,
                    groundtruth : Broadcast[scala.collection.immutable.Set[(Long, Long)]],
@@ -588,15 +588,8 @@ object WNPFor {
 
           if(localWeights(neighbours(i)) >= threshold && profileID < neighbours(i)){//If the  neighbour has a weight greater than the threshold
             cont += 1//Increments the counter that keep the number of keeped neighbours
-            if(profileID < neighbours(i)) {//The groundtruth contains (ID dataset 1, ID dataset2), I have to look the profile with lower ID first
-              if(groundtruth.value.contains((profileID, neighbours(i)))){//If this elements is in the groundtruth
-                edges = UnweightedEdge(profileID, neighbours(i)) :: edges //Generates the edge to keep
-              }
-            }
-            else{//Same operation
-              if(groundtruth.value.contains((neighbours(i), profileID))) {
-                edges = UnweightedEdge(neighbours(i), profileID) :: edges
-              }
+            if(groundtruth.value.contains((profileID, neighbours(i)))){//If this elements is in the groundtruth
+              edges = UnweightedEdge(profileID, neighbours(i)) :: edges //Generates the edge to keep
             }
           }
           localWeights.update(neighbours(i), 0)//Resets the neighbour weight for the next iteration
@@ -613,7 +606,7 @@ object WNPFor {
   }
 
   def WNPChiSquare1(profileBlocksFiltered : RDD[ProfileBlocks],
-                   blockIndex : Broadcast[scala.collection.Map[Long, (List[Long], List[Long])]],
+                   blockIndex : Broadcast[scala.collection.Map[Long, (Set[Long], Set[Long])]],
                    maxID : Int,
                    separatorID : Long,
                    groundtruth : Broadcast[scala.collection.immutable.Set[(Long, Long)]],

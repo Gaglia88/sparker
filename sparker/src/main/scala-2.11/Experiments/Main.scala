@@ -3,14 +3,15 @@ package Experiments
 import java.util.Calendar
 
 import BlockBuildingMethods.LSHTwitter.Settings
-import BlockBuildingMethods.{LSHTwitter, TokenBlocking}
+import BlockBuildingMethods.{LSHSpark, LSHTwitter, LSHTwitter2, TokenBlocking}
 import BlockRefinementMethods.{BlockFiltering, BlockPurging}
 import BlockRefinementMethods.PruningMethods._
-import DataStructures.{BlockWithComparisonSize, KeysCluster, ProfileBlocks}
+import DataStructures.{BlockWithComparisonSize, KeysCluster, Profile, ProfileBlocks}
 import Utilities.Converters
 import Wrappers.{CSVWrapper, JsonRDDWrapper, SerializedObjectLoader}
 import org.apache.log4j.{FileAppender, Level, LogManager, SimpleLayout}
 import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.rdd.RDD
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.SizeEstimator
@@ -31,29 +32,52 @@ object Main {
     val manualMapping = "manualMapping"
   }
 
-  object DATASETS {
-    val abtBuy = "abtBuy"
-    val googleAmazon = "googleAmazon"
-    val scholarDblp = "scholarDblp"
-    val movies = "movies"
-    val dblpAcm = "DblpAcm"
+  object DATASETS_CLEAN {
+    val abtBuy = "clean/abtBuy"
+    val googleAmazon = "clean/googleAmazon"
+    val scholarDblp = "clean/scholarDblp"
+    val movies = "clean/movies"
+    val dblpAcm = "clean/DblpAcm"
+  }
+
+  object DATASETS_DIRTY {
+    val dblpAcm = "dirty/DblpAcm"
+    val restaurant = "dirty/restaurant"
+    val songs = "dirty/songs"
   }
 
   def main(args: Array[String]) {
-    val baseBath = "C:/Users/Luca/Desktop/datasets/"+DATASETS.dblpAcm
+
+    val baseBath = "C:/Users/Luca/Desktop/datasets/"+DATASETS_DIRTY.songs
+    val clean = false
+
+
     val pathDataset1 = baseBath+"/dataset1"
-    val pathDataset2 = baseBath+"/dataset2"
+    val pathDataset2 : String = {
+      if (clean) {
+        baseBath + "/dataset2"
+      }
+      else{
+        null
+      }
+    }
     val pathGt = baseBath+"/groundtruth"
     val defaultLogPath = "C:/Users/Luca/Desktop/"
     val wrapperType = WRAPPER_TYPES.serialized
     val GTWrapperType = WRAPPER_TYPES.serialized
-    val purgingRatio = 1.005
+    val purgingRatio = 1.015
     val filteringRatio = 0.8
     val hashNum = 16
     val clusterThreshold = 0.3
-    val memoryHeap = 118
+    val memoryHeap = 10
     val memoryStack = 5
     val realId = "id"
+    val clusterSeparateAttributes = true
+    val clusterMaxFactor = 1
+    val useEntropy = false
+    val blockingType = BLOCKING_TYPES.schemaLess
+    val thresholdType = WNPFor.ThresholdTypes.AVG
+    val logName = "WNP_CHI_SQUARE_MAXDIV2_SCHEMA_ENTROPY.txt"
 
     val conf = new SparkConf()
       .setAppName("Main")
@@ -61,32 +85,26 @@ object Main {
       .set("spark.executor.memory", memoryHeap+"g")
       .set("spark.network.timeout", "10000s")
       .set("spark.executor.heartbeatInterval", "40s")
-      .set("spark.default.parallelism", "32")
-      .set("spark.executor.extraJavaOptions", "-Xss"+memoryStack+"g")
+      //.set("spark.default.parallelism", "32")
+      .set("spark.executor.extraJavaOptions", "-Xss"+memoryStack+"g -XX:+UseConcMarkSweepGC")
       .set("spark.local.dir", "/data2/sparkTmp/")
       .set("spark.driver.maxResultSize", "10g")
     val sc = new SparkContext(conf)
 
-    val clusters = List(
-      KeysCluster(0,List("d_1_title", "d_2_title"),9.762434929509963,0.8),
-      KeysCluster(1,List("d_1_year", "d_2_year"),3.309290823680249,0.8),
-      KeysCluster(2,List("d_1_authors", "d_2_authors"),10.746111975398751,0.8),
-      KeysCluster(3,List("d_1_venue", "d_2_venue"),3.3225607247542883,0.8)
-    )
-
-    val weightTypes = List(PruningUtils.WeightTypes.JS, PruningUtils.WeightTypes.CBS, PruningUtils.WeightTypes.ARCS, PruningUtils.WeightTypes.chiSquare)
+    //val weightTypes = List(PruningUtils.WeightTypes.JS, PruningUtils.WeightTypes.CBS, PruningUtils.WeightTypes.ARCS, PruningUtils.WeightTypes.chiSquare)
+    val weightTypes = List(PruningUtils.WeightTypes.CBS)
 
     Main.runClean(
       sc,
-      defaultLogPath + "WNP_CBS_AVG_SCHEMA_ENTROPY.txt",
+      defaultLogPath + logName,
       wrapperType,
       purgingRatio,
       filteringRatio,
-      BLOCKING_TYPES.manualMapping,
-      WNPFor.ThresholdTypes.MAX_FRACT_2,
+      blockingType,
+      thresholdType,
       hashNum,
       clusterThreshold,
-      useEntropy = true,
+      useEntropy = useEntropy,
       memoryHeap,
       memoryStack,
       pathDataset1,
@@ -95,14 +113,19 @@ object Main {
       GTWrapperType,
       weightTypes,
       realId,
-      manualClusters = clusters
+      clusterSeparateAttributes,
+      clusterMaxFactor
     )
+
+    sc.stop()
   }
 
   def runClean(sc : SparkContext, logPath : String, wrapperType : String, purgingRatio : Double, filteringRatio : Double, blockingType : String,
                thresholdType : String, hashNum : Int, clusterThreshold : Double,
                useEntropy : Boolean, memoryHeap : Int, memoryStack : Int, pathDataset1 : String, pathDataset2 : String,
-               pathGt : String, wrapperGtType : String, weightTypes : List[String], realID : String = "", manualClusters : List[KeysCluster] = Nil, storageLevel : StorageLevel = StorageLevel.MEMORY_AND_DISK): Unit = {
+               pathGt : String, wrapperGtType : String, weightTypes : List[String], realID : String = "",
+               clusterSeparateAttributes : Boolean = true, clusterMaxFactor : Double = 0.9,
+               manualClusters : List[KeysCluster] = Nil, storageLevel : StorageLevel = StorageLevel.MEMORY_AND_DISK): Unit = {
 
 
     val log = LogManager.getRootLogger
@@ -133,23 +156,36 @@ object Main {
         CSVWrapper.loadProfiles(filePath = pathDataset1, header = true, realIDField = realID)
       }
     }
-    val separatorID = dataset1.map(_.id).max()
     val profilesDataset1 = dataset1.count()
-    val dataset2 = {
-      if (wrapperType == WRAPPER_TYPES.serialized) {
-        SerializedObjectLoader.loadProfiles(pathDataset2, separatorID + 1)
-      }
-      else if(wrapperType == WRAPPER_TYPES.json){
-        JsonRDDWrapper.loadProfiles(pathDataset2, separatorID + 1, realID)
-      }
-      else {
-        CSVWrapper.loadProfiles(filePath = pathDataset2, startIDFrom = separatorID + 1, header = true, realIDField = realID)
-      }
-    }
-    val maxProfileID = dataset2.map(_.id).max()
-    val profilesDataset2 = dataset2.count()
 
-    val profiles = dataset1.union(dataset2)
+    var separatorID : Long = -1
+    var profiles : RDD[Profile] = null
+    var maxProfileID : Long = 0
+    var profilesDataset2 : Long = 0
+    var dataset2 : RDD[Profile] = null
+
+    if(pathDataset2 != null){
+      separatorID = dataset1.map(_.id).max()
+      dataset2 = {
+        if (wrapperType == WRAPPER_TYPES.serialized) {
+          SerializedObjectLoader.loadProfiles(pathDataset2, separatorID + 1)
+        }
+        else if(wrapperType == WRAPPER_TYPES.json){
+          JsonRDDWrapper.loadProfiles(pathDataset2, separatorID + 1, realID)
+        }
+        else {
+          CSVWrapper.loadProfiles(filePath = pathDataset2, startIDFrom = separatorID + 1, header = true, realIDField = realID)
+        }
+      }
+      profilesDataset2 = dataset2.count()
+
+      maxProfileID = dataset2.map(_.id).max()
+      profiles = dataset1.union(dataset2)
+    }
+    else{
+      profiles = dataset1
+      maxProfileID = dataset1.map(_.id).max()
+    }
     profiles.persist(storageLevel)
     val numProfiles = profiles.count()
 
@@ -163,6 +199,7 @@ object Main {
     log.info()
     log.info()
 
+
     log.info("SPARKER - Start to loading the groundtruth")
     val groundtruth = {
       if(wrapperGtType == WRAPPER_TYPES.serialized){
@@ -173,25 +210,49 @@ object Main {
       }
     }
     val gtNum = groundtruth.count()
-    val realIdId1 = sc.broadcast(dataset1.map{p =>
-      (p.originalID, p.id)
-    }.collectAsMap())
-    val realIdId2 = sc.broadcast(dataset2.map{p =>
-      (p.originalID, p.id)
-    }.collectAsMap())
-    log.info("SPARKER - Start to generate the new groundtruth")
-    val newGT = groundtruth.map{g =>
-      val first = realIdId1.value.get(g.firstEntityID)
-      val second = realIdId2.value.get(g.secondEntityID)
-      if(first.isDefined && second.isDefined){
-        (first.get, second.get)
-      }
-      else{
-        (-1L, -1L)
-      }
-    }.filter(_._1 >= 0).collect().toSet
-    realIdId1.unpersist()
-    realIdId2.unpersist()
+
+
+    var newGT : Set[(Long, Long)] = null
+
+    if(dataset2 == null){
+      val realIds = sc.broadcast(profiles.map(p => (p.originalID, p.id)).collectAsMap())
+
+      log.info("SPARKER - Start to generate the new groundtruth")
+      newGT = groundtruth.map{
+        g =>
+          val first = realIds.value(g.firstEntityID)
+          val second = realIds.value(g.secondEntityID)
+          if(first < second){
+            (first, second)
+          }
+          else{
+            (second, first)
+          }
+      }.filter(x => x._1 != x._2).collect().toSet
+      realIds.unpersist()
+    }
+    else{
+      val realIdId1 = sc.broadcast(dataset1.map{p =>
+        (p.originalID, p.id)
+      }.collectAsMap())
+      val realIdId2 = sc.broadcast(dataset2.map{p =>
+        (p.originalID, p.id)
+      }.collectAsMap())
+      log.info("SPARKER - Start to generate the new groundtruth")
+      newGT = groundtruth.map{g =>
+        val first = realIdId1.value.get(g.firstEntityID)
+        val second = realIdId2.value.get(g.secondEntityID)
+        if(first.isDefined && second.isDefined){
+          (first.get, second.get)
+        }
+        else{
+          (-1L, -1L)
+        }
+      }.filter(_._1 >= 0).collect().toSet
+      realIdId1.unpersist()
+      realIdId2.unpersist()
+    }
+
     groundtruth.persist(storageLevel)
     val newGTSize = newGT.size
     log.info("SPARKER - Generation completed")
@@ -208,12 +269,23 @@ object Main {
       log.info("SPARKER - Start to generating clusters")
       log.info("SPARKER - Number of hashes "+hashNum)
       log.info("SPARKER - Target threshold "+clusterThreshold)
-      clusters = LSHTwitter.clusterSimilarAttributes(profiles, hashNum, clusterThreshold, separatorID = separatorID)
+
+      clusters = /*LSHSpark.clusterSimilarAttributes(profiles, hashNum, clusterThreshold, separatorID = separatorID)*/
+        //LSHTwitter2.clusterSimilarAttributes(profiles, hashNum, clusterThreshold, separatorID = separatorID)
+
+      LSHTwitter2.clusterSimilarAttributes2(
+        profiles = profiles,
+        numHashes = hashNum,
+        targetThreshold = clusterThreshold,
+        maxFactor = clusterMaxFactor,
+        separatorID = separatorID,
+        separateAttributes = clusterSeparateAttributes
+      )
+
       log.info("SPARKER - Generated clusters")
       clusters.foreach(log.info)
       clusterTime = Calendar.getInstance()
       log.info("SPARKER - Time to generate clusters "+(clusterTime.getTimeInMillis-gtTime.getTimeInMillis)+" ms")
-      clusters.foreach(log.info)
       log.info()
     }
     else if(blockingType == BLOCKING_TYPES.manualMapping){
@@ -225,6 +297,7 @@ object Main {
         clusters = manualClusters
       }
     }
+
 
     log.info("SPARKER - Start to generating blocks")
     val blocks = {
@@ -240,7 +313,9 @@ object Main {
     val numBlocks = blocks.count()
     profiles.unpersist()
     dataset1.unpersist()
-    dataset2.unpersist()
+    if(dataset2 != null){
+      dataset2.unpersist()
+    }
     val blocksTime = Calendar.getInstance()
     log.info("SPARKER - Number of blocks "+numBlocks)
     log.info("SPARKER - Time to generate blocks "+(blocksTime.getTimeInMillis-clusterTime.getTimeInMillis)+" ms")

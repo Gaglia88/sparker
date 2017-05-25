@@ -29,7 +29,7 @@ object TokenBlocking {
     /* For each tokens divides the profiles in two lists according to the original datasets where they come (in case of Clean-Clean) */
     val profilesGrouped = profilePerKey map {
       c =>
-        val entityIds = c._2.toList
+        val entityIds = c._2.toSet
 
         val blockEntities = (entityIds.partition(_ <= separatorID))
         blockEntities
@@ -84,7 +84,7 @@ object TokenBlocking {
     /* For each tokens divides the profiles in two lists according to the original datasets where they come (in case of Clean-Clean) */
     val profilesGrouped = profilePerKey map {
       c =>
-        val entityIds = c._2.toList
+        val entityIds = c._2.toSet
 
         val blockEntities = (entityIds.partition(_ <= separatorID))
         blockEntities
@@ -181,8 +181,8 @@ object TokenBlocking {
         val blockId = x._2
         val entityIds = x._1._2
         val entropy = x._1._1
-        if (separatorID < 0) BlockDirty(blockId, (entityIds._2.toList, entityIds._1.toList), entropy)
-        else BlockClean(blockId, (entityIds._1.toList, entityIds._2.toList), entropy)
+        if (separatorID < 0) BlockDirty(blockId, (entityIds._2.toSet, entityIds._1.toSet), entropy)
+        else BlockClean(blockId, (entityIds._1.toSet, entityIds._2.toSet), entropy)
     }
   }
 
@@ -262,8 +262,8 @@ object TokenBlocking {
     /* Map each row in an object BlockClean or BlockDirty */
     profilesGroupedWithIds map {
       case((entityIds, entropy, clusterID), blockId) =>
-        if (separatorID < 0) BlockDirty(blockId, (entityIds._2.toList, entityIds._1.toList), entropy, clusterID)
-        else BlockClean(blockId, (entityIds._1.toList, entityIds._2.toList), entropy, clusterID)
+        if (separatorID < 0) BlockDirty(blockId, (entityIds._2.toSet, entityIds._1.toSet), entropy, clusterID)
+        else BlockClean(blockId, (entityIds._1.toSet, entityIds._2.toSet), entropy, clusterID)
     }
   }
 
@@ -285,11 +285,11 @@ object TokenBlocking {
      * and also calculates the entropy */
     val profilesGrouped = profilePerKey map {
       c =>
-        val entityIds = c._2.map(_._1).toList       //Id of the entity
+        val entityIds = c._2.map(_._1).toSet       //Id of the entity
         val allProfilesTokens = c._2.flatMap(_._2)  //All tokens contained in the entity
         val numberOfTokens = allProfilesTokens.size.toDouble
         val entropy = -allProfilesTokens.groupBy(x => x).map(x => (x._2.size)).map(s => (s / numberOfTokens) * Math.log(s.toDouble / numberOfTokens)).sum / numberOfTokens
-        val blockEntities = (entityIds.distinct.partition(_ <= separatorID))
+        val blockEntities = (entityIds.partition(_ <= separatorID))
         (entropy, blockEntities)
     }
 
