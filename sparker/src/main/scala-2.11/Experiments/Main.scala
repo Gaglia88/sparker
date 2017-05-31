@@ -6,9 +6,9 @@ import BlockBuildingMethods.LSHTwitter.Settings
 import BlockBuildingMethods.{LSHSpark, LSHTwitter, LSHTwitter2, TokenBlocking}
 import BlockRefinementMethods.{BlockFiltering, BlockPurging}
 import BlockRefinementMethods.PruningMethods._
-import DataStructures.{BlockWithComparisonSize, KeysCluster, Profile, ProfileBlocks}
+import DataStructures._
 import Utilities.Converters
-import Wrappers.{CSVWrapper, JsonRDDWrapper, SerializedObjectLoader}
+import Wrappers.{CSVWrapper, JSONWrapper, SerializedObjectLoader}
 import org.apache.log4j.{FileAppender, Level, LogManager, SimpleLayout}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
@@ -48,8 +48,8 @@ object Main {
 
   def main(args: Array[String]) {
 
-    val baseBath = "C:/Users/Luca/Desktop/datasets/"+DATASETS_DIRTY.songs
-    val clean = false
+    val baseBath = "C:/Users/Luca/Desktop/datasets/"+DATASETS_CLEAN.movies
+    val clean = true
 
 
     val pathDataset1 = baseBath+"/dataset1"
@@ -65,7 +65,7 @@ object Main {
     val defaultLogPath = "C:/Users/Luca/Desktop/"
     val wrapperType = WRAPPER_TYPES.serialized
     val GTWrapperType = WRAPPER_TYPES.serialized
-    val purgingRatio = 1.015
+    val purgingRatio = 1.005
     val filteringRatio = 0.8
     val hashNum = 16
     val clusterThreshold = 0.3
@@ -89,8 +89,11 @@ object Main {
       .set("spark.executor.extraJavaOptions", "-Xss"+memoryStack+"g -XX:+UseConcMarkSweepGC")
       .set("spark.local.dir", "/data2/sparkTmp/")
       .set("spark.driver.maxResultSize", "10g")
-    val sc = new SparkContext(conf)
+      .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+      .set("spark.kryo.registrator", "Utilities.SparkErRegistrator")
+      .set("spark.kryo.registrationRequired", "false")
 
+    val sc = new SparkContext(conf)
     //val weightTypes = List(PruningUtils.WeightTypes.JS, PruningUtils.WeightTypes.CBS, PruningUtils.WeightTypes.ARCS, PruningUtils.WeightTypes.chiSquare)
     val weightTypes = List(PruningUtils.WeightTypes.CBS)
 
@@ -150,7 +153,7 @@ object Main {
         SerializedObjectLoader.loadProfiles(pathDataset1)
       }
       else if(wrapperType == WRAPPER_TYPES.json){
-        JsonRDDWrapper.loadProfiles(pathDataset1, 0, realID)
+        JSONWrapper.loadProfiles(pathDataset1, 0, realID)
       }
       else{
         CSVWrapper.loadProfiles(filePath = pathDataset1, header = true, realIDField = realID)
@@ -171,7 +174,7 @@ object Main {
           SerializedObjectLoader.loadProfiles(pathDataset2, separatorID + 1)
         }
         else if(wrapperType == WRAPPER_TYPES.json){
-          JsonRDDWrapper.loadProfiles(pathDataset2, separatorID + 1, realID)
+          JSONWrapper.loadProfiles(pathDataset2, separatorID + 1, realID)
         }
         else {
           CSVWrapper.loadProfiles(filePath = pathDataset2, startIDFrom = separatorID + 1, header = true, realIDField = realID)
@@ -204,6 +207,9 @@ object Main {
     val groundtruth = {
       if(wrapperGtType == WRAPPER_TYPES.serialized){
         SerializedObjectLoader.loadGroundtruth(pathGt)
+      }
+      else if(wrapperGtType == WRAPPER_TYPES.json){
+        JSONWrapper.loadGroundtruth(pathGt, "id1", "id2")
       }
       else{
         CSVWrapper.loadGroundtruth(filePath = pathGt, header = true)
@@ -373,12 +379,17 @@ object Main {
     log.info()*/
 
 
-
-
-    val profileBlocksMap = profileBlocksFiltered.map(pb => (pb.profileID, pb.blocks.size)).collectAsMap()
-    log.info("SPARKER - Size of the broadcast profileBlocksMap "+SizeEstimator.estimate(profileBlocksMap)+" byte")
-    val profileBlocksSizeIndex : Broadcast[scala.collection.Map[Long, Int]] = sc.broadcast(profileBlocksMap)
-    log.info("SPARKER - profileBlocksSizeIndex broadcast done (if JS)")
+    val profileBlocksSizeIndex : Broadcast[scala.collection.Map[Long, Int]] = {
+      if(weightTypes.contains(PruningUtils.WeightTypes.chiSquare) || weightTypes.contains(PruningUtils.WeightTypes.JS)){
+        val profileBlocksMap = profileBlocksFiltered.map(pb => (pb.profileID, pb.blocks.size)).collectAsMap()
+        log.info("SPARKER - Size of the broadcast profileBlocksMap "+SizeEstimator.estimate(profileBlocksMap)+" byte")
+        sc.broadcast(profileBlocksMap)
+      }
+      else{
+        null
+      }
+    }
+    log.info("SPARKER - profileBlocksSizeIndex broadcast done (if needed)")
 
     val blocksEntropiesMap : Broadcast[scala.collection.Map[Long, Double]] = {
       if(useEntropy) {
@@ -425,7 +436,7 @@ object Main {
       log.info("SPARKER - Time to pruning edges " + (endPruningTime.getTimeInMillis - startPruningTime.getTimeInMillis) + " ms")
       log.info()
 
-      "blockingType = "+blockingType+", thresholdType = "+thresholdType+", weightType = "+weightTypes(i)+", useEntropy = "+useEntropy+", PC = "+(perfectMatch.toFloat/newGTSize.toFloat)+", PQ = "+(perfectMatch.toFloat/numEdges.toFloat)+", Pruning execution time "+(endPruningTime.getTimeInMillis-startPruningTime.getTimeInMillis)
+      "SPARKER - blockingType = "+blockingType+", thresholdType = "+thresholdType+", weightType = "+weightTypes(i)+", useEntropy = "+useEntropy+", PC = "+(perfectMatch.toFloat/newGTSize.toFloat)+", PQ = "+(perfectMatch.toFloat/numEdges.toFloat)+", Pruning execution time "+(endPruningTime.getTimeInMillis-startPruningTime.getTimeInMillis)
     }
     log.info("SPARKER - Total execution time "+(endPruningTime.getTimeInMillis-startTime.getTimeInMillis))
 

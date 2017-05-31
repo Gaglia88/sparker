@@ -1,8 +1,10 @@
 package Wrappers
 
 import DataStructures.{KeyValue, MatchingEntities, Profile}
+import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SparkSession}
+import org.json.{JSONArray, JSONObject}
 
 import scala.collection.mutable.MutableList
 
@@ -11,7 +13,7 @@ import scala.collection.mutable.MutableList
   *
   * JSON Wrapper
   */
-object JSONWrapper extends WrapperTrait{
+object JSONWrapper {
 
   /**
     * Load the profiles from a JSON file.
@@ -19,24 +21,36 @@ object JSONWrapper extends WrapperTrait{
     * the value can be a single value or an array of values
     * */
   def loadProfiles(filePath : String, startIDFrom : Long = 0, realIDField : String = "") : RDD[Profile] = {
-    val sparkSession = SparkSession.builder.getOrCreate()
-    val df = sparkSession.read.json(filePath)
-    val columnNames = df.columns
+    val sc = SparkContext.getOrCreate()
+    val raw = sc.textFile(filePath)
+    raw.zipWithIndex().map{ case(row, id) =>
+      val obj = new JSONObject(row)
+      val realID = {
+        if(realIDField.isEmpty){
+          ""
+        }
+        else{
+          obj.getString(realIDField)
+        }
+      }
+      val p = Profile(id+startIDFrom, originalID = realID)
 
-    df.rdd.map(row => rowToAttributes(columnNames, row)).zipWithIndex().map {
-      profile =>
-        val profileID = profile._2 + startIDFrom
-        val attributes = profile._1
-        val realID = {
-          if(realIDField.isEmpty){
-            ""
-          }
-          else {
-            attributes.filter(_.key == realIDField).map(_.value).mkString("").trim
+      val keys = obj.keys()
+      while(keys.hasNext){
+        val key = keys.next()
+        if(key != realIDField){
+          val data = obj.get(key)
+          data match {
+            case jsonArray : JSONArray =>
+              val it = data.asInstanceOf[JSONArray].iterator()
+              while(it.hasNext){
+                p.addAttribute(KeyValue(key, it.next().toString))
+              }
+            case _ => p.addAttribute(KeyValue(key, data.toString))
           }
         }
-
-        Profile(profileID, attributes.filter(kv => kv.key != realIDField), realID)
+      }
+      p
     }
   }
 
@@ -45,12 +59,12 @@ object JSONWrapper extends WrapperTrait{
     * The JSON must contains a JSONObject for each row, and the JSONObject must contains two key : value
     * that represents the ids of the matching entities
     * */
-  def loadGroundtruth(filePath : String) : RDD[MatchingEntities] = {
-    val sparkSession = SparkSession.builder.getOrCreate()
-    val df = sparkSession.read.json(filePath)
-    df.rdd map {
-      row =>
-        MatchingEntities(row.get(0).toString, row.get(1).toString)
+  def loadGroundtruth(filePath : String, firstDatasetAttribute : String, secondDatasetAttribute : String) : RDD[MatchingEntities] = {
+    val sc = SparkContext.getOrCreate()
+    val raw = sc.textFile(filePath)
+    raw.map{ row =>
+      val obj = new JSONObject(row)
+      MatchingEntities(obj.getString(firstDatasetAttribute), obj.getString(secondDatasetAttribute))
     }
   }
 
