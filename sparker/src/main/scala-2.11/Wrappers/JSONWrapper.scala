@@ -30,7 +30,7 @@ object JSONWrapper {
           ""
         }
         else{
-          obj.getString(realIDField)
+          obj.get(realIDField).toString
         }
       }
       val p = Profile(id+startIDFrom, originalID = realID)
@@ -64,7 +64,7 @@ object JSONWrapper {
     val raw = sc.textFile(filePath)
     raw.map{ row =>
       val obj = new JSONObject(row)
-      MatchingEntities(obj.getString(firstDatasetAttribute), obj.getString(secondDatasetAttribute))
+      MatchingEntities(obj.get(firstDatasetAttribute).toString, obj.get(secondDatasetAttribute).toString)
     }
   }
 

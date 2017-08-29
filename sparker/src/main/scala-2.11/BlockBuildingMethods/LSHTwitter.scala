@@ -5,6 +5,7 @@ import java.util.Calendar
 
 import DataStructures._
 import com.twitter.algebird.{MinHashSignature, MinHasher, MinHasher32}
+import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.jgrapht.alg.ConnectivityInspector
 import org.jgrapht.graph.{DefaultEdge, SimpleGraph}
@@ -27,11 +28,14 @@ object LSHTwitter {
   }
 
   def createBlocks(profiles: RDD[Profile], numHashes: Int, targetThreshold: Double, numBands: Int = -1, separatorID: Long = -1, keysToExclude: Iterable[String] = Nil): RDD[BlockAbstract] = {
+    @transient lazy val log = org.apache.log4j.LogManager.getRootLogger
     /* Number of bands */
     val b = numBands match {
       case -1 => MinHasher.pickBands(targetThreshold, numHashes)
       case _ => numBands
     }
+
+    log.info("SPARKER - Num bands "+b)
 
     implicit lazy val minHasher = new MinHasher32(numHashes, b)
 
@@ -64,6 +68,7 @@ object LSHTwitter {
     }.filter(_.getComparisonSize() > 0).map(x => x)
   }
 
+
   /**
     * Given a list of profiles return a list of clusters of similar attributes based on the attributes values.
     * Thi cluster can be used to perform the clusted token blocking.
@@ -77,17 +82,23 @@ object LSHTwitter {
     * @param keysToExclude   keys to exclude from the blocking process
     * @return clusters of similar attributes
     **/
-  def clusterSimilarAttributes(profiles: RDD[Profile], numHashes: Int, targetThreshold: Double, numBands: Int = -1, separatorID: Long = -1, keysToExclude: Iterable[String] = Nil): List[KeysCluster] = {
+  def clusterSimilarAttributes(profiles: RDD[Profile], numHashes: Int, targetThreshold: Double, maxFactor : Double, separateAttributes : Boolean = true, numBands: Int = -1, separatorID: Long = -1, keysToExclude: Iterable[String] = Nil): List[KeysCluster] = {
+    @transient lazy val log = org.apache.log4j.LogManager.getRootLogger
+
+    log.info("SPARKER - NEW LSH VERSION ;)")
+
+    val t0 = Calendar.getInstance()
+
     /* Number of bands */
     val b = numBands match {
       case -1 => MinHasher.pickBands(targetThreshold, numHashes)
       case _ => numBands
     }
 
-    implicit lazy val minHasher = new MinHasher32(numHashes, b)
-    @transient lazy val log = org.apache.log4j.LogManager.getRootLogger
+    log.info("SPARKER - Num bands "+b)
 
-    val t0 = Calendar.getInstance()
+    @transient lazy val minHasher = new MinHasher32(numHashes, b)
+
     /* Generate the tokens */
     val attributesToken: RDD[(String, String)] = profiles.flatMap {
       profile =>
@@ -96,7 +107,7 @@ object LSHTwitter {
         /* Tokenize the values of the keeped attributes, then for each token emits (dataset + key, token) */
         attributes.flatMap {
           kv =>
-            kv.value.split(BlockingUtils.TokenizerPattern.DEFAULT_SPLITTING).filter(_.trim.size > 0).map((dataset + kv.key, _))
+            kv.value.split(BlockingUtils.TokenizerPattern.DEFAULT_SPLITTING).filter(_.trim.size > 0).map(_.toLowerCase).map((dataset + kv.key, _))
         }
     }
 
@@ -106,42 +117,52 @@ object LSHTwitter {
         (attribute, minHasher.init(tokens))
     }.groupByKey()
 
-    val firstDataset = attributeWithHashes.filter(_._1.startsWith(Settings.FIRST_DATASET_PREFIX)).zipWithUniqueId()
-    val dasetSeparator = firstDataset.map(_._2).max()
-    val secondDataset = attributeWithHashes.filter(_._1.startsWith(Settings.SECOND_DATASET_PREFIX)).zipWithUniqueId().map(x => (x._1, x._2+dasetSeparator+1))
-    val attributesIdHashes = firstDataset.union(secondDataset)
+    //attributeWithHashes.cache()
+    val numberOfAttributes = attributeWithHashes.count()
+    log.info("SPARKER - Number of attributes "+numberOfAttributes)
 
-    /** Calculates the signatures */
-    val attributeWithSignature = attributesIdHashes.map {
-      case ((attribute, hashes), attributeID) => (attributeID, hashes.reduce((x, y) => minHasher.plus(x, y)))
+
+    val attributeWithSignature = attributeWithHashes.mapPartitions{
+      partition =>
+        partition.map {
+          case (attribute, hashes) => (attribute, hashes.reduce((x, y) => minHasher.plus(x, y)))
+        }
     }
 
-    attributeWithSignature.count()
-    val t1 = Calendar.getInstance()
-    log.info("SPARKER - Time to calculate signatures "+(t1.getTimeInMillis-t0.getTimeInMillis)+"ms")
+    /** Calculates the signatures */
+    /*val attributeWithSignature = attributeWithHashes.map {
+      case (attribute, hashes) => (attribute, hashes.reduce((x, y) => minHasher.plus(x, y)))
+    }*/
+
+    val attributeSignatures = attributeWithSignature.collectAsMap()
 
     /** Map the (attribute, signature) to the buckets, this will produce a list of (attribute, signature, [buckets]) */
-    val attributeWithBuckets = attributeWithSignature.map { case ((attributeID, signature)) => (attributeID, signature, minHasher.buckets(signature)) }
+    val attributeWithBuckets = attributeWithSignature.map { case ((attribute, signature)) => (attribute, minHasher.buckets(signature)) }
 
-    attributeWithBuckets.cache()
     attributeWithBuckets.count()
-    val t5 = Calendar.getInstance()
-    log.info("SPARKER - Time to calculate buckets "+(t5.getTimeInMillis-t1.getTimeInMillis)+"ms")
+    //attributeWithHashes.unpersist()
+    val t1 = Calendar.getInstance()
+    log.info("SPARKER - Time to perform LSH "+(t1.getTimeInMillis-t0.getTimeInMillis)+" ms")
+
 
     /** For each bucket emits (bucket, (attribute, signature)) then groups the keys by the buckets,
       * and removes the buckets that contains only one element. */
     val attributesPerBucket = attributeWithBuckets.flatMap {
-      case (attributeID, signature, buckets) =>
-        buckets.map(bucketID => (bucketID, (attributeID, signature)))
-    }.groupByKey().filter(_._2.size > 1)
+      case (attribute, buckets) =>
+        buckets.map(bucketID => (bucketID, attribute))
+    }.groupByKey().map(x => (x._1, x._2.toSet)).filter(x => x._2.size > 1 && x._2.size < 101)
+
+    val numbuckets = attributesPerBucket.count()
+    val t2 = Calendar.getInstance()
+    log.info("SPARKER - Number of buckets "+numbuckets)
+    log.info("SPARKER - Time to calculate attributesPerBucket "+(t2.getTimeInMillis-t1.getTimeInMillis)+" ms")
 
     /** Generates the clusters of attributes (attributes that are finished in the same bucket) */
     val partialClusters = attributesPerBucket.map(_._2)
 
-    partialClusters.count()
-    attributeWithBuckets.unpersist()
-    val t2 = Calendar.getInstance()
-    log.info("SPARKER - Time to calculate couples (attr1, attr2, similarity) "+(t2.getTimeInMillis-t5.getTimeInMillis)+"ms")
+
+    val sc = SparkContext.getOrCreate()
+    val attributeSignaturesBroadcast = sc.broadcast(attributeSignatures)
 
     /**
       * Generates edges between the different attributes in each cluster
@@ -153,17 +174,22 @@ object LSHTwitter {
         * This will produces two list, one with the attributes that belongs from the first dataset, and one with the
         * attributes that belongs from the second.
         * */
-      val attrPartitioned = clusterElements.partition(_._1 <= dasetSeparator)
-      /** Generates the edges */
-      if(separatorID >= 0){//Clean context
-        (for (e1<-attrPartitioned._1; e2<-attrPartitioned._2) yield (e1._1,(e2._1,minHasher.similarity(e1._2, e2._2)))).toList
+      if(separateAttributes && separatorID >= 0){
+        val attrPartitioned = clusterElements.partition(_.startsWith(Settings.FIRST_DATASET_PREFIX))
+        (for (e1<-attrPartitioned._1; e2<-attrPartitioned._2) yield (e1,(e2,minHasher.similarity(attributeSignaturesBroadcast.value(e1), attributeSignaturesBroadcast.value(e2)))))
       }
-      else{//Dirty context
-        attrPartitioned._1.toList.combinations(2).map(x =>
-          (x(0)._1, (x(1)._1, minHasher.similarity(x(0)._2, x(1)._2)))
-        ).toList
+      else{
+        clusterElements.toList.combinations(2).map(x =>
+          (x(0), (x(1), minHasher.similarity(attributeSignaturesBroadcast.value(x(0)), attributeSignaturesBroadcast.value(x(1)))))
+        )
       }
-    }//.distinct()
+    }
+
+
+    edges.count()
+    val t3 = Calendar.getInstance()
+    log.info("SPARKER - Time to calculate edges "+(t3.getTimeInMillis-t2.getTimeInMillis)+" ms")
+
 
     /** Produces all the edges,
       * e.g if we have (attr1, (attr2, sim(a1,a2)) will also generates
@@ -176,20 +202,20 @@ object LSHTwitter {
         edges.map{case(attr1, (attr2, sim)) =>
           (attr2, (attr1, sim))
         }
-      ).groupByKey()
+      ).groupByKey().map(x => (x._1, x._2.toSet))
 
-    /** For each attribute keeps the attributes with the highest JS, and produce a cluster of elements (k1, [top k2]) */
+    /** For each attribute keeps the attribute with the highest JS, and produce a cluster of elements (k1, k2) */
     val topEdges = edgesPerKey.map{case(key1, keys2) =>
-      val max = keys2.map(_._2).max
-      (key1, keys2.filter(_._2 == max).map(_._1))
+      val max = keys2.map(_._2).max*maxFactor
+      (key1, keys2.filter(_._2 >= max).map(_._1))
     }
 
-
     topEdges.count()
-    val t3 = Calendar.getInstance()
-    log.info("SPARKER - Time to calculate edges "+(t3.getTimeInMillis-t2.getTimeInMillis)+"ms")
+    val t4 = Calendar.getInstance()
+    log.info("SPARKER - Time to calculate top edges "+(t4.getTimeInMillis-t3.getTimeInMillis)+" ms")
 
-    val graph = new SimpleGraph[Long, DefaultEdge](classOf[DefaultEdge]);
+
+    val graph = new SimpleGraph[String, DefaultEdge](classOf[DefaultEdge]);
 
     val vertices = topEdges.map(_._1).union(topEdges.flatMap(_._2)).distinct().collect()
 
@@ -197,29 +223,29 @@ object LSHTwitter {
       graph.addVertex(v)
     }
     topEdges.collect().foreach{ case(from, to) =>
-      to.foreach{ t =>
-        graph.addEdge(from, t)
+      to.foreach{n =>
+        graph.addEdge(from, n)
       }
     }
+
+    attributeSignaturesBroadcast.unpersist()
 
     val ci =  new ConnectivityInspector(graph)
 
     val connectedComponents = ci.connectedSets()
 
-    val attributeMap = attributesIdHashes.map(x => (x._2, x._1._1)).collectAsMap()
-
     val clusters : Iterable[(Iterable[String], Int)] = (for(i <- 0 to connectedComponents.size()-1) yield{
-      val a = connectedComponents.get(i).asInstanceOf[util.HashSet[Long]].iterator()
+      val a = connectedComponents.get(i).asInstanceOf[util.HashSet[String]].iterator()
       var l : List[String] = Nil
       while(a.hasNext){
-        l = attributeMap(a.next()) :: l
+        l = a.next() :: l
       }
       (l, i)
     }).filter(_._1.size > 0)
 
-    topEdges.count()
-    val t4 = Calendar.getInstance()
-    log.info("SPARKER - Time to generate clusters (connected components) "+(t4.getTimeInMillis-t3.getTimeInMillis)+"ms")
+    val t5 = Calendar.getInstance()
+    log.info("SPARKER - Time to calculate clusters "+(t5.getTimeInMillis-t4.getTimeInMillis)+" ms")
+    attributeSignaturesBroadcast.destroy()
 
     /** Performs the transitive closure on the clusters, and add an unique id to each cluster */
     //val clusters : Iterable[(Iterable[String], Int)] = clustersTransitiveClosure(topEdges).zipWithIndex

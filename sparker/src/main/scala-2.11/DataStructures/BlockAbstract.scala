@@ -1,10 +1,5 @@
 package DataStructures
 
-import WeightingMethods.WeightMethodTrait
-import org.apache.spark.broadcast.Broadcast
-
-import scala.collection.immutable.HashSet
-
 /**
  * Represents a generic block.
  * @author Giovanni Simonini
@@ -25,9 +20,6 @@ trait BlockAbstract  extends Ordered[BlockAbstract]{
 
   /* Return the number of comparisons entailed by this block */
   def getComparisonSize(): Double
-
-  /* Return the comparisons contained in the block */
-  def getComparisons(): List[UnweightedEdge] {}
 
   /* CleanClean return true */
   def isBilateral(): Boolean {}

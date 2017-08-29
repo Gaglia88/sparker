@@ -20,6 +20,32 @@ import org.apache.spark.sql.types._
   */
 object LSHSpark {
 
+  def createBlocks(profiles: RDD[Profile], numHashes: Int, threshold: Double, separatorID: Long = -1, keysToExclude: Iterable[String] = Nil): Set[Long] = {
+    val sqlContext = SparkSession.builder.getOrCreate()
+    import sqlContext.implicits._
+
+
+    val profileTokens = profiles.map{profile =>
+      val attributes = profile.attributes.filter(kv => !keysToExclude.exists(_.equals(kv.key)))
+      val tokens = attributes.flatMap(_.value.split(BlockingUtils.TokenizerPattern.DEFAULT_SPLITTING)).filter(_.trim.size > 0).distinct
+      (profile.id, tokens)
+    }
+
+    val df = profileTokens.map(p => (p._1, p._2.toArray)).toDF("id","tokens")
+    val cvModel: CountVectorizerModel = new CountVectorizer().setInputCol("tokens").setOutputCol("features").fit(df)
+    val isNoneZeroVector = udf({v: Vector => v.numNonzeros > 0}, DataTypes.BooleanType)
+    val vectorizedDf = cvModel.transform(df).filter(isNoneZeroVector(col("features"))).select(col("id"), col("features"))
+
+    //val mh = new MinHashLSH().setNumHashTables(numHashes).setInputCol("features").setOutputCol("hashValues")
+    val mh = new BucketedRandomProjectionLSH().setBucketLength(2.0).setInputCol("features").setOutputCol("hashValues")
+
+    val model = mh.fit(vectorizedDf)
+
+
+    val a = model.approxSimilarityJoin(vectorizedDf, vectorizedDf, threshold).filter("distCol != 0").selectExpr("datasetA.id", "datasetB.id AS id2").rdd.map(row => (row.getAs[Long](0), row.getAs[Long](1)))
+
+    a.filter(x => ((x._1 > separatorID && x._2 <= separatorID) || (x._1 <= separatorID && x._2 > separatorID))).flatMap(x => List(x._1, x._2)).collect().toSet
+  }
 
   def clusterSimilarAttributes(profiles: RDD[Profile], numHashes : Int, threshold : Double, separatorID: Long = -1): List[KeysCluster] = {
     val sqlContext = SparkSession.builder.getOrCreate()
@@ -28,7 +54,7 @@ object LSHSpark {
 
     val attributesToken: RDD[(String, String)] = profiles.flatMap {
       profile =>
-        val dataset = if (profile.id > separatorID) Settings.FIRST_DATASET_PREFIX else Settings.SECOND_DATASET_PREFIX //Calculate the datasetID of the profile
+        val dataset = BlockingUtils.getPrefix(profile.id, separatorID)
         val attributes = profile.attributes
         /* Tokenize the values of the keeped attributes, then for each token emits (dataset + key, token) */
         attributes.flatMap {
@@ -44,7 +70,9 @@ object LSHSpark {
 
     val mh = new MinHashLSH().setNumHashTables(numHashes).setInputCol("features").setOutputCol("hashValues")
     val model = mh.fit(vectorizedDf)
+
     val edges = {
+      //val e = model.approxSimilarityJoin(vectorizedDf, vectorizedDf, threshold).filter("distCol != 0").selectExpr("datasetA.id", "datasetB.id AS id2", "distCol AS w").rdd.map(row => (row.getAs[String](0), (row.getAs[String](1), row.getAs[Double](2))))
       val e = model.approxSimilarityJoin(vectorizedDf, vectorizedDf, threshold).filter("distCol != 0").selectExpr("datasetA.id", "datasetB.id AS id2", "distCol AS w").rdd.map(row => (row.getAs[String](0), (row.getAs[String](1), row.getAs[Double](2))))
       if(separatorID < 0){
         e

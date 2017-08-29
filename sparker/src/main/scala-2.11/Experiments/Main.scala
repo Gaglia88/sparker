@@ -3,18 +3,18 @@ package Experiments
 import java.util.Calendar
 
 import BlockBuildingMethods.LSHTwitter.Settings
-import BlockBuildingMethods.{LSHSpark, LSHTwitter, LSHTwitter2, TokenBlocking}
-import BlockRefinementMethods.{BlockFiltering, BlockPurging}
+import BlockBuildingMethods._
 import BlockRefinementMethods.PruningMethods._
+import BlockRefinementMethods.{BlockFiltering, BlockPurging}
 import DataStructures._
 import Utilities.Converters
 import Wrappers.{CSVWrapper, JSONWrapper, SerializedObjectLoader}
 import org.apache.log4j.{FileAppender, Level, LogManager, SimpleLayout}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
-import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.SizeEstimator
+import org.apache.spark.{SparkConf, SparkContext}
 
 /**
   * Created by Luca on 13/03/2017.
@@ -74,10 +74,10 @@ object Main {
     val realId = "id"
     val clusterSeparateAttributes = true
     val clusterMaxFactor = 1
-    val useEntropy = false
+    val useEntropy = true
     val blockingType = BLOCKING_TYPES.schemaLess
-    val thresholdType = WNPFor.ThresholdTypes.AVG
-    val logName = "WNP_CHI_SQUARE_MAXDIV2_SCHEMA_ENTROPY.txt"
+    val thresholdType = PruningUtils.ThresholdTypes.AVG
+    val logName = "WNP_CHI_SQUARE_MAXDIV2_SCHEMA_ENTROPY_2.txt"
 
     val conf = new SparkConf()
       .setAppName("Main")
@@ -89,13 +89,10 @@ object Main {
       .set("spark.executor.extraJavaOptions", "-Xss"+memoryStack+"g -XX:+UseConcMarkSweepGC")
       .set("spark.local.dir", "/data2/sparkTmp/")
       .set("spark.driver.maxResultSize", "10g")
-      .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
-      .set("spark.kryo.registrator", "Utilities.SparkErRegistrator")
-      .set("spark.kryo.registrationRequired", "false")
 
     val sc = new SparkContext(conf)
-    //val weightTypes = List(PruningUtils.WeightTypes.JS, PruningUtils.WeightTypes.CBS, PruningUtils.WeightTypes.ARCS, PruningUtils.WeightTypes.chiSquare)
-    val weightTypes = List(PruningUtils.WeightTypes.CBS)
+    val weightTypes = List(PruningUtils.WeightTypes.JS, PruningUtils.WeightTypes.CBS, PruningUtils.WeightTypes.ARCS, PruningUtils.WeightTypes.chiSquare, PruningUtils.WeightTypes.EJS, PruningUtils.WeightTypes.ECBS)
+    //val weightTypes = List(PruningUtils.WeightTypes.chiSquare)
 
     Main.runClean(
       sc,
@@ -203,6 +200,18 @@ object Main {
     log.info()
 
 
+    /*val na1 = dataset1.flatMap{profile =>
+      profile.attributes.map(kv => kv.key)
+    }.distinct().count()
+
+    val na2 = dataset2.flatMap{profile =>
+      profile.attributes.map(kv => kv.key)
+    }.distinct().count()
+
+    log.info("SPARKER - Attributes d1 "+na1)
+    log.info("SPARKER - Attributes d2 "+na2)*/
+
+
     log.info("SPARKER - Start to loading the groundtruth")
     val groundtruth = {
       if(wrapperGtType == WRAPPER_TYPES.serialized){
@@ -276,18 +285,55 @@ object Main {
       log.info("SPARKER - Number of hashes "+hashNum)
       log.info("SPARKER - Target threshold "+clusterThreshold)
 
-      clusters = /*LSHSpark.clusterSimilarAttributes(profiles, hashNum, clusterThreshold, separatorID = separatorID)*/
-        //LSHTwitter2.clusterSimilarAttributes(profiles, hashNum, clusterThreshold, separatorID = separatorID)
 
-      LSHTwitter2.clusterSimilarAttributes2(
-        profiles = profiles,
+      /*val similarProfilesBlocks = LSHTwitter.createBlocks(profiles, 128, 0.8, -1, separatorID)
+      val similarProfilesNum = similarProfilesBlocks.count()
+      log.info("Numero blocchi "+similarProfilesNum)
+
+      val similarIds = sc.broadcast(similarProfilesBlocks.flatMap(_.getAllProfiles).collect().toSet)
+      val similarProfiles = profiles.filter(p => similarIds.value.contains(p.id))
+      similarIds.unpersist()*/
+
+      /*
+      val a = LSHTwitter2.createBlocks(profiles, 16, 0.9, -1, separatorID)
+      val b = a.count()
+      log.info("Numero blocchi "+b)
+
+      val c = sc.broadcast(a.flatMap(_.getAllProfiles).collect().toSet)
+      val profilesMap = profiles.filter(p => c.value.contains(p.id)).map(p => (p.id, p.attributes)).collectAsMap()
+      c.unpersist()
+      val d = a.collect()
+      val e = d.flatMap{block =>
+        block.getComparisons().flatMap{edge =>
+          val a1 = profilesMap(edge.firstProfileID)
+          val a2 = profilesMap(edge.secondProfileID)
+
+          val t1 = a1.flatMap{kq =>
+              val keys = kq.value.split(BlockingUtils.TokenizerPattern.DEFAULT_SPLITTING).filter(_.trim.size > 0).distinct
+              keys.map((_, LSHTwitter2.Settings.FIRST_DATASET_PREFIX+kq.key))
+          }
+          val t2 = a2.flatMap{kq =>
+              val keys = kq.value.split(BlockingUtils.TokenizerPattern.DEFAULT_SPLITTING).filter(_.trim.size > 0).distinct
+              keys.map((_, LSHTwitter2.Settings.SECOND_DATASET_PREFIX+kq.key))
+          }
+          val t3 = t1.union(t2)
+          t3.groupBy(_._1).filter(_._2.size > 1).map(x => x._2.map(_._2).toSet).filter(_.size > 1).toSet
+        }
+      }.toSet
+
+      e.foreach(println)*/
+
+      clusters = //LSHSpark.clusterSimilarAttributes(profiles, hashNum, clusterThreshold, separatorID = separatorID)
+        //LSHTwitter2.clusterSimilarAttributes(profiles, hashNum, clusterThreshold, separatorID = separatorID)
+      LSHTwitter.clusterSimilarAttributes(
+        profiles = profiles,//similarProfiles,
         numHashes = hashNum,
         targetThreshold = clusterThreshold,
         maxFactor = clusterMaxFactor,
         separatorID = separatorID,
         separateAttributes = clusterSeparateAttributes
       )
-
+      log.info("SPARKER - Number of clusters "+clusters.size)
       log.info("SPARKER - Generated clusters")
       clusters.foreach(log.info)
       clusterTime = Calendar.getInstance()
@@ -341,6 +387,13 @@ object Main {
     log.info("SPARKER - Start to block filtering, factor "+filteringRatio)
 
     val profileBlocks = Converters.blocksToProfileBlocks(blocksPurged)
+
+    /*val profileBlocks1 = profileBlocks.filter(_.profileID <= separatorID)
+    val profileBlocks2 = profileBlocks.filter(_.profileID > separatorID)
+
+    val profileBlocksFiltered1 = BlockFiltering.blockFiltering(profileBlocks1, 0.5)
+    val profileBlocksFiltered2 = BlockFiltering.blockFiltering(profileBlocks2, 0.7)
+    val profileBlocksFiltered = profileBlocksFiltered1.union(profileBlocksFiltered2)*/
     val profileBlocksFiltered = BlockFiltering.blockFiltering(profileBlocks, filteringRatio)
 
     profileBlocksFiltered.persist(storageLevel)
@@ -380,7 +433,7 @@ object Main {
 
 
     val profileBlocksSizeIndex : Broadcast[scala.collection.Map[Long, Int]] = {
-      if(weightTypes.contains(PruningUtils.WeightTypes.chiSquare) || weightTypes.contains(PruningUtils.WeightTypes.JS)){
+      if(weightTypes.contains(PruningUtils.WeightTypes.chiSquare) || weightTypes.contains(PruningUtils.WeightTypes.JS) || weightTypes.contains(PruningUtils.WeightTypes.EJS)){
         val profileBlocksMap = profileBlocksFiltered.map(pb => (pb.profileID, pb.blocks.size)).collectAsMap()
         log.info("SPARKER - Size of the broadcast profileBlocksMap "+SizeEstimator.estimate(profileBlocksMap)+" byte")
         sc.broadcast(profileBlocksMap)
@@ -418,7 +471,10 @@ object Main {
         weightTypes(i),
         profileBlocksSizeIndex,
         useEntropy,
-        blocksEntropiesMap)
+        blocksEntropiesMap,
+        2.0,
+        PruningUtils.ComparisonTypes.AND
+      )
 
       edgesAndCount.persist(storageLevel)
       val numEdges = edgesAndCount.map(_._1).sum()

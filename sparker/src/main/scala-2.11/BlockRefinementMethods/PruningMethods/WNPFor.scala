@@ -1,9 +1,7 @@
 package BlockRefinementMethods.PruningMethods
 
 import BlockRefinementMethods.PruningMethods.PruningUtils.WeightTypes
-import BlockRefinementMethods.PruningMethods.WNPFor.ThresholdTypes
 import DataStructures.{ProfileBlocks, UnweightedEdge}
-import org.apache.commons.math3.stat.inference.ChiSquareTest
 import org.apache.spark.SparkContext
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
@@ -12,747 +10,283 @@ import org.apache.spark.rdd.RDD
   * Created by Luca on 03/05/2017.
   */
 object WNPFor {
-
   /**
-    * Types of threeshold
-    * */
-  object ThresholdTypes {
-    /** Local maximum divided by 2 */
-    val MAX_FRACT_2 = "maxdiv2"
-    /** Average of all local weights */
-    val AVG = "avg"
-  }
-
-  def WNP(profileBlocksFiltered : RDD[ProfileBlocks],//RDD(profile, [blocks ids])
-          blockIndex : Broadcast[scala.collection.Map[Long, (Set[Long], Set[Long])]],//(block id, ([dataset 1 blocks], [dataset 2 blocks])
-          maxID : Int,//MaxProfileID
-          separatorID : Long,//Separator ID
-          groundtruth : Broadcast[scala.collection.immutable.Set[(Long, Long)]],//Groundtruth
-          thresholdType : String = ThresholdTypes.AVG,//Threshold type
-          weightType : String = WeightTypes.CBS,//Weight type
-          profileBlocksSizeIndex : Broadcast[scala.collection.Map[Long, Int]] = null,//(block id, block size)
-          useEntropy : Boolean = false,
-          blocksEntropies : Broadcast[scala.collection.Map[Long, Double]] = null//(block id, entropy)
+    * Computes the Weight Node Pruning
+    *
+    * @param profileBlocksFiltered  profileBlocks after block filtering
+    * @param blockIndex             a map that given a block ID returns the ID of the contained profiles
+    * @param maxID                  maximum profile ID
+    * @param separatorID            maximum profile ID of the first dataset (-1 if there is only one dataset)
+    * @param groundtruth            set of true matches
+    * @param thresholdType          type of threshold to use
+    * @param weightType             type of weight to use @see BlockRefinementMethods.PruningMethods.PruningUtils.WeightTypes
+    * @param profileBlocksSizeIndex a map that contains for each profile the number of its blocks
+    * @param useEntropy             if true use the provided entropies to improve the edge weighting
+    * @param blocksEntropies        a map that contains for each block its entropy
+    * @param chi2divider            used only in the chiSquare weight method to compute the threshold
+    * @param comparisonType         type of comparison to perform @see PruningUtils.ComparisonTypes
+    * @return an RDD that contains for each partition the number of existing edges and the retained edges
+    **/
+  def WNP(profileBlocksFiltered: RDD[ProfileBlocks],
+          blockIndex: Broadcast[scala.collection.Map[Long, (Set[Long], Set[Long])]],
+          maxID: Int,
+          separatorID: Long,
+          groundtruth: Broadcast[scala.collection.immutable.Set[(Long, Long)]],
+          thresholdType: String = PruningUtils.ThresholdTypes.AVG,
+          weightType: String = WeightTypes.CBS,
+          profileBlocksSizeIndex: Broadcast[scala.collection.Map[Long, Int]] = null,
+          useEntropy: Boolean = false,
+          blocksEntropies: Broadcast[scala.collection.Map[Long, Double]] = null,
+          chi2divider: Double = 2.0,
+          comparisonType: String = PruningUtils.ComparisonTypes.OR
          )
   : RDD[(Double, Iterable[UnweightedEdge])] = {
-    
-    if(useEntropy == true && blocksEntropies == null){
+    if (useEntropy && blocksEntropies == null) {
       throw new Exception("blocksEntropies must be defined")
     }
-    else if(weightType == WeightTypes.chiSquare){
-      if(profileBlocksSizeIndex == null){
-        throw new Exception("profileBlocksSizeIndex must be defined")
-      }
-      else{
-        val sc = SparkContext.getOrCreate()
-        val thresholds = sc.broadcast(WNPChiSquare1(profileBlocksFiltered, blockIndex, maxID, separatorID, groundtruth, thresholdType, profileBlocksSizeIndex, useEntropy, blocksEntropies).collectAsMap())
-        WNPChiSquare(profileBlocksFiltered, blockIndex, maxID, separatorID, groundtruth, thresholdType, profileBlocksSizeIndex, useEntropy, blocksEntropies, thresholds)
-      }
+
+    if ((weightType == WeightTypes.ECBS || weightType == WeightTypes.EJS || weightType == WeightTypes.JS || weightType == WeightTypes.chiSquare) && profileBlocksSizeIndex == null) {
+      throw new Exception("profileBlocksSizeIndex must be defined")
     }
-    else if(weightType == WeightTypes.ARCS){
-      WNPArcs(profileBlocksFiltered, blockIndex, maxID, separatorID, groundtruth, thresholdType, useEntropy, blocksEntropies)
+
+    val sc = SparkContext.getOrCreate()
+    var numberOfEdges: Double = 0
+    var edgesPerProfile: Broadcast[scala.collection.Map[Long, Double]] = null
+
+    if (weightType == WeightTypes.EJS) {
+      val stats = CommonNodePruning.computeStatistics(profileBlocksFiltered, blockIndex, maxID, separatorID)
+      numberOfEdges = stats.map(_._1.toDouble).sum()
+      edgesPerProfile = sc.broadcast(stats.map(x => (x._2._1, x._2._2.toDouble)).groupByKey().map(x => (x._1, x._2.sum)).collectAsMap())
     }
-    else if(weightType == WeightTypes.JS){
-      if(profileBlocksSizeIndex == null){
-        throw new Exception("profileBlocksSizeIndex must be defined")
-      }
-      else{
-        WNPJS(profileBlocksFiltered, blockIndex, maxID, separatorID, groundtruth, thresholdType, profileBlocksSizeIndex, useEntropy, blocksEntropies)
-      }
+
+    val thresholds = sc.broadcast(calcThresholds(profileBlocksFiltered, blockIndex, maxID, separatorID, thresholdType, weightType, profileBlocksSizeIndex, useEntropy, blocksEntropies, numberOfEdges, edgesPerProfile).collectAsMap())
+    val edges = pruning(profileBlocksFiltered, blockIndex, maxID, separatorID, groundtruth, thresholdType, weightType, profileBlocksSizeIndex, useEntropy, blocksEntropies, chi2divider, comparisonType, thresholds, numberOfEdges, edgesPerProfile)
+
+    thresholds.unpersist()
+    if (edgesPerProfile != null) {
+      edgesPerProfile.unpersist()
     }
-    else{
-      WNPCBS(profileBlocksFiltered, blockIndex, maxID, separatorID, groundtruth, thresholdType, useEntropy, blocksEntropies)
-    }
+
+    edges
   }
 
-  def WNPArcs(profileBlocksFiltered : RDD[ProfileBlocks],
-              blockIndex : Broadcast[scala.collection.Map[Long, (Set[Long], Set[Long])]],
-              maxID : Int,
-              separatorID : Long,
-              groundtruth : Broadcast[scala.collection.immutable.Set[(Long, Long)]],
-              thresholdType : String = ThresholdTypes.AVG,
-              useEntropy : Boolean = false,
-              blocksEntropies : Broadcast[scala.collection.Map[Long, Double]] = null
-             )
-  : RDD[(Double, Iterable[UnweightedEdge])] = {
-    profileBlocksFiltered.mapPartitions {partition => //For each partition
-      val localWeights = Array.fill[Double](maxID+1){0}//Contains the neighbours weights
-      val neighbours = Array.ofDim[Int](maxID+1)//Contains the neighbours IDs
-      var neighboursNumber = 0//Keeps the number of neighbours
-      var acc : Double = 0//Accumulator, used to compute the AVG or to keep the local maximum
 
-      val entropies : Array[Double] = {
-        if(useEntropy){
-          Array.fill[Double](maxID + 1) {0.0}
+  /**
+    * Compute the threshold for a profile
+    *
+    * @param weights          an array which contains the weight of each neighbour
+    * @param neighbours       an array which contains the IDs of the neighbours
+    * @param neighboursNumber number of neighbours
+    * @param thresholdType    type of threshold to use
+    * @return the profile threshold
+    **/
+  def calcThreshold(weights: Array[Double],
+                    neighbours: Array[Int],
+                    neighboursNumber: Int,
+                    thresholdType: String): Double = {
+    var acc: Double = 0
+    for (i <- 0 to neighboursNumber - 1) {
+      val neighbourID = neighbours(i)
+      if (thresholdType == PruningUtils.ThresholdTypes.AVG) {
+        acc += weights(neighbourID)
+      }
+      else if (thresholdType == PruningUtils.ThresholdTypes.MAX_FRACT_2 && weights(neighbourID) > acc) {
+        acc = weights(neighbourID)
+      }
+    }
+
+    if (thresholdType == PruningUtils.ThresholdTypes.AVG) {
+      acc /= neighboursNumber
+    }
+    else if (thresholdType == PruningUtils.ThresholdTypes.MAX_FRACT_2) {
+      acc /= 2.0
+    }
+    acc
+  }
+
+  /**
+    * Performs the pruning
+    *
+    * @param weights          an array which contains the weight of each neighbour
+    * @param neighbours       an array which contains the IDs of the neighbours
+    * @param neighboursNumber number of neighbours
+    * @param groundtruth      set of true matches
+    * @param weightType       type of weight to use @see BlockRefinementMethods.PruningMethods.PruningUtils.WeightTypes
+    * @param comparisonType   type of comparison to perform @see ComparisonTypes
+    * @param thresholds       local profile threshold
+    * @param chi2divider      used only in the chiSquare weight method to compute the local threshold
+    * @return a tuple that contains the number of retained edges and the edges that exists in the groundtruth
+    **/
+  def doPruning(profileID: Long,
+                weights: Array[Double],
+                neighbours: Array[Int],
+                neighboursNumber: Int,
+                groundtruth: Broadcast[scala.collection.immutable.Set[(Long, Long)]],
+                weightType: String,
+                comparisonType: String,
+                thresholds: Broadcast[scala.collection.Map[Long, Double]],
+                chi2divider: Double
+               ): (Double, Iterable[UnweightedEdge]) = {
+
+    var cont: Double = 0
+    var edges: List[UnweightedEdge] = Nil
+    val profileThreshold = thresholds.value(profileID)
+
+    if (weightType == WeightTypes.chiSquare) {
+      for (i <- 0 to neighboursNumber - 1) {
+        val neighbourID = neighbours(i)
+        val neighbourThreshold = thresholds.value(neighbourID)
+        val neighbourWeight = weights(neighbourID)
+        val threshold = Math.sqrt(Math.pow(neighbourThreshold, 2) + Math.pow(profileThreshold, 2)) / chi2divider
+
+        if (neighbourWeight >= threshold) {
+          cont += 1
+          if (groundtruth.value.contains((profileID, neighbourID))) {
+            edges = UnweightedEdge(profileID, neighbours(i)) :: edges
+          }
         }
-        else{
+      }
+    }
+    else {
+      for (i <- 0 to neighboursNumber - 1) {
+        val neighbourID = neighbours(i)
+        val neighbourThreshold = thresholds.value(neighbourID)
+        val neighbourWeight = weights(neighbourID)
+
+        if (
+          (comparisonType == PruningUtils.ComparisonTypes.AND && neighbourWeight >= neighbourThreshold && neighbourWeight >= profileThreshold)
+            || (comparisonType == PruningUtils.ComparisonTypes.OR && (neighbourWeight >= neighbourThreshold || neighbourWeight >= profileThreshold))
+        ) {
+          cont += 1
+          if (groundtruth.value.contains((profileID, neighbourID))) {
+            edges = UnweightedEdge(profileID, neighbours(i)) :: edges
+          }
+        }
+      }
+    }
+
+    (cont, edges)
+  }
+
+
+  /**
+    * For each profile computes the threshold
+    *
+    * @param profileBlocksFiltered  profileBlocks after block filtering
+    * @param blockIndex             a map that given a block ID returns the ID of the contained profiles
+    * @param maxID                  maximum profile ID
+    * @param separatorID            maximum profile ID of the first dataset (-1 if there is only one dataset)
+    * @param thresholdType          type of threshold to use
+    * @param weightType             type of weight to use @see BlockRefinementMethods.PruningMethods.PruningUtils.WeightTypes
+    * @param profileBlocksSizeIndex a map that contains for each profile the number of its blocks
+    * @param useEntropy             if true use the provided entropies to improve the edge weighting
+    * @param blocksEntropies        a map that contains for each block its entropy
+    * @param numberOfEdges          global number of existings edges
+    * @param edgesPerProfile        a maps that contains for each profile the number of edges
+    * @return an RDD which contains for each profileID the threshold
+    **/
+  def calcThresholds(profileBlocksFiltered: RDD[ProfileBlocks],
+                     blockIndex: Broadcast[scala.collection.Map[Long, (Set[Long], Set[Long])]],
+                     maxID: Int,
+                     separatorID: Long,
+                     thresholdType: String,
+                     weightType: String,
+                     profileBlocksSizeIndex: Broadcast[scala.collection.Map[Long, Int]],
+                     useEntropy: Boolean,
+                     blocksEntropies: Broadcast[scala.collection.Map[Long, Double]],
+                     numberOfEdges: Double,
+                     edgesPerProfile: Broadcast[scala.collection.Map[Long, Double]]
+                    ): RDD[(Long, Double)] = {
+
+    profileBlocksFiltered.mapPartitions { partition =>
+      val localWeights = Array.fill[Double](maxID + 1) {
+        0
+      }
+      val neighbours = Array.ofDim[Int](maxID + 1)
+      var neighboursNumber = 0
+
+      val entropies: Array[Double] = {
+        if (useEntropy) {
+          Array.fill[Double](maxID + 1) {
+            0.0
+          }
+        }
+        else {
           null
         }
-      }//Contains the sums of entropies
+      }
 
-      partition.map{pb => //Maps the elements contained in the partition, they are a list of (profile ID, [blocks which contains the profile])
-        val profileID = pb.profileID//ProfileID
-        val profileBlocks = pb.blocks//Blocks in which it appears
-
-        profileBlocks.foreach {block => //Foreach block
-          val blockID = block.blockID//Block ID
-          val blockProfiles = blockIndex.value.get(blockID)//Other profiles in the same block
-
-          if(blockProfiles.isDefined){//Check if exists
-            var comparisons : Double = 0
-            val profilesIDs = {//Gets the others profiles IDs
-              if(separatorID >= 0 && profileID <= separatorID){//If we are in a Clean-Clean context and the profile ID is in the first dataset, then his neighbours are in the second dataset
-                comparisons = blockProfiles.get._1.size*blockProfiles.get._2.size
-                blockProfiles.get._2
-              }
-              else{//Otherwise they are in the first dataset
-                if(separatorID > 0){
-                  comparisons = blockProfiles.get._1.size*blockProfiles.get._2.size
-                }
-                else{
-                  comparisons = blockProfiles.get._1.size*blockProfiles.get._2.size
-                }
-                blockProfiles.get._1
-              }
-            }
-
-            val blockEntropy = {
-              if(useEntropy){
-                val e = blocksEntropies.value.get(blockID)
-                if(e.isDefined){
-                  e.get
-                }
-                else{
-                  0.0
-                }
-              }
-              else{
-                0.0
-              }
-            }
-
-            profilesIDs.foreach {secondProfileID => //For each neighbour computes the weight
-              val neighbourID = secondProfileID.toInt//neighbour ID
-              val neighbourWeight = localWeights(neighbourID)//New neighbour weight
-              localWeights.update(neighbourID, neighbourWeight+(1/comparisons))//Update the neighbour weight
-              if(neighbourWeight == 0){//If its equal to 0 mean that this neighbour it is the first time that this neighbour appears
-                neighbours.update(neighboursNumber, neighbourID)//Add the neighbour to the neighbours list
-                neighboursNumber += 1//Increment the number of neighbour
-              }
-
-              if(useEntropy){
-                val neighbourEntropy = entropies(neighbourID)+blockEntropy//New neighbour entropy
-                entropies.update(neighbourID, neighbourEntropy)//Update the neighbour entropy
-              }
-            }
-          }
-        }
-
-        var cont = 0//Counts the number of keeped neighbour
-
-        for(i <- 0 to neighboursNumber-1){//Computes the average weight
-          val neighbourID = neighbours(i)//Neighbour ID
-          val weight : Double = {
-            if(useEntropy){
-              localWeights(neighbourID)*entropies(neighbourID)
-            }
-            else{
-              localWeights(neighbourID)
-            }
-          }//Value of ARCS for this neighbour
-
-          if(useEntropy){
-            localWeights.update(neighbourID, weight)
-          }
-          if(thresholdType == ThresholdTypes.AVG){//If the threshold it is the AVG sums all the weights
-            acc += weight
-          }
-          else if(weight > acc){//Else if max/2 compute the local maximum
-            acc = weight
-          }
-        }
-
-        val threshold = {//Pruning threshold
-          if(thresholdType == ThresholdTypes.AVG){
-            acc/neighboursNumber.toFloat
-          }
-          else{
-            acc/2.0
-          }
-        }
-
-        var edges : List[UnweightedEdge] = Nil
-
-        for(i <- 0 to neighboursNumber-1) {//For each neighbour
-          if(localWeights(neighbours(i)) >= threshold){//If the  neighbour has a weight greater than the threshold
-            cont += 1//Increments the counter that keep the number of keeped neighbours
-            if(profileID < neighbours(i)) {//The groundtruth contains (ID dataset 1, ID dataset2), I have to look the profile with lower ID first
-              if(groundtruth.value.contains((profileID, neighbours(i)))){//If this elements is in the groundtruth
-                edges = UnweightedEdge(profileID, neighbours(i)) :: edges //Generates the edge to keep
-              }
-            }
-            else{//Same operation
-              if(groundtruth.value.contains((neighbours(i), profileID))) {
-                edges = UnweightedEdge(neighbours(i), profileID) :: edges
-              }
-            }
-          }
-          localWeights.update(neighbours(i), 0)//Resets the neighbour weight for the next iteration
-          if(useEntropy){
-            entropies.update(neighbours(i), 0)
-          }
-        }
-
-        neighboursNumber = 0//Resets neighbours number for the next iteration
-        acc = 0//Reset global weight for the next iteration/
-
-        (cont.toDouble, edges)//Returns number of keeped neighbours and the matches
+      partition.map { pb =>
+        neighboursNumber = CommonNodePruning.calcCBS(pb, blockIndex, separatorID, useEntropy, blocksEntropies, localWeights, entropies, neighbours, true)
+        CommonNodePruning.calcWeights(pb, localWeights, neighbours, entropies, neighboursNumber, blockIndex, separatorID, weightType, profileBlocksSizeIndex, useEntropy, numberOfEdges, edgesPerProfile)
+        val threshold = calcThreshold(localWeights, neighbours, neighboursNumber, thresholdType)
+        CommonNodePruning.doReset(localWeights, neighbours, entropies, useEntropy, neighboursNumber)
+        (pb.profileID, threshold)
       }
     }
   }
 
-  def WNPJS(profileBlocksFiltered : RDD[ProfileBlocks],//RDD(profile, [blocks ids])
-             blockIndex : Broadcast[scala.collection.Map[Long, (Set[Long], Set[Long])]],//(block id, ([dataset 1 blocks], [dataset 2 blocks])
-             maxID : Int,//MaxProfileID
-             separatorID : Long,//Separator ID
-             groundtruth : Broadcast[scala.collection.immutable.Set[(Long, Long)]],//Groundtruth
-             thresholdType : String = ThresholdTypes.AVG,//Threshold type
-             profileBlocksSizeIndex : Broadcast[scala.collection.Map[Long, Int]],
-             useEntropy : Boolean = false,
-             blocksEntropies : Broadcast[scala.collection.Map[Long, Double]] = null//(block id, entropy)
-            )
-  : RDD[(Double, Iterable[UnweightedEdge])] = {
-    profileBlocksFiltered.mapPartitions {partition => //For each partition
-      val localWeights = Array.fill[Double](maxID+1){0}//Contains the neighbours weights
-      val neighbours = Array.ofDim[Int](maxID+1)//Contains the neighbours IDs
-      var neighboursNumber = 0//Keeps the number of neighbours
-      var acc : Double = 0//Accumulator, used to compute the AVG or to keep the local maximum
-      val entropies : Array[Double] = {
-        if(useEntropy){
-          Array.fill[Double](maxID + 1) {0.0}
+  /**
+    * Performs the pruning
+    *
+    * @param profileBlocksFiltered  profileBlocks after block filtering
+    * @param blockIndex             a map that given a block ID returns the ID of the contained profiles
+    * @param maxID                  maximum profile ID
+    * @param separatorID            maximum profile ID of the first dataset (-1 if there is only one dataset)
+    * @param groundtruth            set of true matches
+    * @param thresholdType          type of threshold to use
+    * @param weightType             type of weight to use @see BlockRefinementMethods.PruningMethods.PruningUtils.WeightTypes
+    * @param profileBlocksSizeIndex a map that contains for each profile the number of its blocks
+    * @param useEntropy             if true use the provided entropies to improve the edge weighting
+    * @param blocksEntropies        a map that contains for each block its entropy
+    * @param chi2divider            used only in the chiSquare weight method to compute the threshold
+    * @param comparisonType         type of comparison to perform @see ComparisonTypes
+    * @param numberOfEdges          global number of existings edges
+    * @param edgesPerProfile        a maps that contains for each profile the number of edges
+    * @return an RDD that for each partition contains the number of retained edges and the list of the elements that appears in the groundtruth
+    **/
+  def pruning(profileBlocksFiltered: RDD[ProfileBlocks],
+              blockIndex: Broadcast[scala.collection.Map[Long, (Set[Long], Set[Long])]],
+              maxID: Int,
+              separatorID: Long,
+              groundtruth: Broadcast[scala.collection.immutable.Set[(Long, Long)]],
+              thresholdType: String,
+              weightType: String,
+              profileBlocksSizeIndex: Broadcast[scala.collection.Map[Long, Int]],
+              useEntropy: Boolean,
+              blocksEntropies: Broadcast[scala.collection.Map[Long, Double]],
+              chi2divider: Double,
+              comparisonType: String,
+              thresholds: Broadcast[scala.collection.Map[Long, Double]],
+              numberOfEdges: Double,
+              edgesPerProfile: Broadcast[scala.collection.Map[Long, Double]]
+             ): RDD[(Double, Iterable[UnweightedEdge])] = {
+
+    profileBlocksFiltered.mapPartitions { partition =>
+      val localWeights = Array.fill[Double](maxID + 1) {
+        0
+      }
+      val neighbours = Array.ofDim[Int](maxID + 1)
+      var neighboursNumber = 0
+
+      val entropies: Array[Double] = {
+        if (useEntropy) {
+          Array.fill[Double](maxID + 1) {
+            0.0
+          }
         }
-        else{
+        else {
           null
         }
-      }//Contains the sums of entropies
+      }
 
-      partition.map{pb => //Maps the elements contained in the partition, they are a list of (profilee ID, [blocks which contains the profile])
-        val profileID = pb.profileID//ProfileID
-        val profileBlocks = pb.blocks//Blocks in which it appears
-        val numberOfProfileBlocks = profileBlocks.size////Number of blocks in which it appears
-
-        profileBlocks.foreach {block => //Foreach block
-          val blockID = block.blockID//Block ID
-          val blockProfiles = blockIndex.value.get(blockID)//Other profiles in the same block
-          if(blockProfiles.isDefined){//Check if exists
-            val profilesIDs = {//Gets the others profiles IDs
-              if(separatorID >= 0 && profileID <= separatorID){//If we are in a Clean-Clean context and the profile ID is in the first dataset, then his neighbours are in the second dataset
-                blockProfiles.get._2
-              }
-              else{//Otherwise they are in the first dataset
-                blockProfiles.get._1
-              }
-            }
-
-            val blockEntropy = {
-              if(useEntropy){
-                val e = blocksEntropies.value.get(blockID)
-                if(e.isDefined){
-                  e.get
-                }
-                else{
-                  0.0
-                }
-              }
-              else{
-                0.0
-              }
-            }
-
-            profilesIDs.foreach {secondProfileID => //For each neighbour computes the weight
-              val neighbourID = secondProfileID.toInt//neighbour ID
-              val neighbourWeight = localWeights(neighbourID)+1//New neighbour weight
-              localWeights.update(neighbourID, neighbourWeight)//Update the neighbour weight
-              if(useEntropy){
-                val neighbourEntropy = entropies(neighbourID)+blockEntropy//New neighbour entropy
-                entropies.update(neighbourID, neighbourEntropy)//Update the neighbour entropy
-              }
-              if(neighbourWeight == 1){//If its equal to 1 mean that this neighbour it is the first time that this neighbour appears
-                neighbours.update(neighboursNumber, neighbourID)//Add the neighbour to the neighbours list
-                neighboursNumber += 1//Increment the number of neighbour
-              }
-            }
-          }
-        }
-
-        for(i <- 0 to neighboursNumber-1){//Computes the Jaccard Similarity
-          val neighbourID = neighbours(i)//Neighbour ID
-          val commonBlocks = localWeights(neighbourID)//Number of common blocks between this neighbour
-          val JS = {
-            if(useEntropy){
-              (commonBlocks / (numberOfProfileBlocks + profileBlocksSizeIndex.value(neighbourID) - commonBlocks))*entropies(neighbourID)
-            }
-            else{
-              commonBlocks / (numberOfProfileBlocks + profileBlocksSizeIndex.value(neighbourID) - commonBlocks)//Jaccard Similarity
-            }
-          }
-          localWeights.update(neighbourID, JS)//Update the local neighbour weight
-          if(thresholdType == ThresholdTypes.AVG){//If the threshold it is the AVG sums all the weights
-            acc += JS
-          }
-          else if(JS > acc){//Else if max/2 compute the local maximum
-            acc = JS
-          }
-        }
-
-        var cont = 0//Counts the number of keeped neighbour
-        val threshold : Double = {//Pruning threshold
-          if(thresholdType == ThresholdTypes.AVG){
-            acc/neighboursNumber.toDouble
-          }
-          else{
-            acc/2.0
-          }
-        }
-
-        var edges : List[UnweightedEdge] = Nil
-
-        for(i <- 0 to neighboursNumber-1) {//For each neighbour
-          if(localWeights(neighbours(i)) >= threshold){//If the  neighbour has a weight greater than the threshold
-            cont += 1//Increments the counter that keep the number of keeped neighbours
-            if(profileID < neighbours(i)) {//The groundtruth contains (ID dataset 1, ID dataset2), I have to look the profile with lower ID first
-              if(groundtruth.value.contains((profileID, neighbours(i)))){//If this elements is in the groundtruth
-                edges = UnweightedEdge(profileID, neighbours(i)) :: edges //Generates the edge to keep
-              }
-            }
-            else{//Same operation
-              if(groundtruth.value.contains((neighbours(i), profileID))) {
-                edges = UnweightedEdge(neighbours(i), profileID) :: edges
-              }
-            }
-          }
-          localWeights.update(neighbours(i), 0)//Resets the neighbour weight for the next iteration
-          if(useEntropy){
-            entropies.update(neighbours(i), 0)//Resets the entropy weight
-          }
-        }
-
-        neighboursNumber = 0//Resets neighbours number for the next iteration
-        acc = 0//Reset global weight for the next iteration/
-
-        (cont.toDouble, edges)//Returns number of keeped neighbours and the matches
+      partition.map { pb =>
+        neighboursNumber = CommonNodePruning.calcCBS(pb, blockIndex, separatorID, useEntropy, blocksEntropies, localWeights, entropies, neighbours, false)
+        CommonNodePruning.calcWeights(pb, localWeights, neighbours, entropies, neighboursNumber, blockIndex, separatorID, weightType, profileBlocksSizeIndex, useEntropy, numberOfEdges, edgesPerProfile)
+        val result = doPruning(pb.profileID, localWeights, neighbours, neighboursNumber, groundtruth, weightType, comparisonType, thresholds, chi2divider)
+        CommonNodePruning.doReset(localWeights, neighbours, entropies, useEntropy, neighboursNumber)
+        result
       }
     }
   }
-
-  def WNPCBS(profileBlocksFiltered : RDD[ProfileBlocks],//RDD(profile, [blocks ids])
-             blockIndex : Broadcast[scala.collection.Map[Long, (Set[Long], Set[Long])]],//(block id, ([dataset 1 blocks], [dataset 2 blocks])
-             maxID : Int,//MaxProfileID
-             separatorID : Long,//Separator ID
-             groundtruth : Broadcast[scala.collection.immutable.Set[(Long, Long)]],//Groundtruth
-             thresholdType : String = ThresholdTypes.AVG,//Threshold type
-             useEntropy : Boolean = false,
-             blocksEntropies : Broadcast[scala.collection.Map[Long, Double]] = null//(block id, entropy)
-            ) 
-  : RDD[(Double, Iterable[UnweightedEdge])] = {
-    profileBlocksFiltered.mapPartitions {partition => //For each partition
-      val localWeights = Array.fill[Double](maxID+1){0}//Contains the neighbours weights
-      val neighbours = Array.ofDim[Int](maxID+1)//Contains the neighbours IDs
-      var neighboursNumber = 0//Keeps the number of neighbours
-      var acc : Double = 0//Accumulator, used to compute the AVG or to keep the local maximum
-
-      partition.map{pb => //Maps the elements contained in the partition, they are a list of (profilee ID, [blocks which contains the profile])
-        val profileID = pb.profileID//ProfileID
-        val profileBlocks = pb.blocks//Blocks in which it appears
-
-        profileBlocks.foreach {block => //Foreach block
-          val blockID = block.blockID//Block ID
-          val blockProfiles = blockIndex.value.get(blockID)//Other profiles in the same block
-          if(blockProfiles.isDefined){//Check if exists
-            val profilesIDs = {//Gets the others profiles IDs
-              if(separatorID >= 0 && profileID <= separatorID){//If we are in a Clean-Clean context and the profile ID is in the first dataset, then his neighbours are in the second dataset
-                blockProfiles.get._2
-              }
-              else{//Otherwise they are in the first dataset
-                blockProfiles.get._1
-              }
-            }
-
-            val blockEntropy = {
-              if(useEntropy){
-                val e = blocksEntropies.value.get(blockID)
-                if(e.isDefined){
-                  e.get
-                }
-                else{
-                  0.0
-                }
-              }
-              else{
-                0.0
-              }
-            }
-            
-            profilesIDs.foreach {secondProfileID => //For each neighbour computes the weight
-              val neighbourID = secondProfileID.toInt//neighbour ID
-              val weight = {
-                if(useEntropy){
-                  blockEntropy
-                }
-                else{
-                  1
-                }
-              }
-              val neighbourWeight = localWeights(neighbourID)+weight//New neighbour weight
-              localWeights.update(neighbourID, neighbourWeight)//Update the neighbour weight
-              if(neighbourWeight == weight){//If its equal to weight means that this neighbour it is the first time that this neighbour appears
-                neighbours.update(neighboursNumber, neighbourID)//Add the neighbour to the neighbours list
-                neighboursNumber += 1//Increment the number of neighbour
-              }
-              if(thresholdType == ThresholdTypes.AVG){//If the threshold it is the AVG sums all the weights
-                acc += weight
-              }
-              else if(neighbourWeight > acc){//Else if max/2 compute the local maximum
-                acc = neighbourWeight
-              }
-            }
-          }
-        }
-
-        var cont = 0//Counts the number of keeped neighbour
-        val threshold : Double = {//Pruning threshold
-          if(thresholdType == ThresholdTypes.AVG){
-            acc/neighboursNumber.toDouble
-          }
-          else{
-            acc/2.0
-          }
-        }
-
-        var edges : List[UnweightedEdge] = Nil
-
-        for(i <- 0 to neighboursNumber-1) {//For each neighbour
-          if(localWeights(neighbours(i)) >= threshold){//If the  neighbour has a weight greater than the threshold
-            cont += 1//Increments the counter that keep the number of keeped neighbours
-            if(profileID < neighbours(i)) {//The groundtruth contains (ID dataset 1, ID dataset2), I have to look the profile with lower ID first
-              if(groundtruth.value.contains((profileID, neighbours(i)))){//If this elements is in the groundtruth
-                edges = UnweightedEdge(profileID, neighbours(i)) :: edges //Generates the edge to keep
-              }
-            }
-            else{//Same operation
-              if(groundtruth.value.contains((neighbours(i), profileID))) {
-                edges = UnweightedEdge(neighbours(i), profileID) :: edges
-              }
-            }
-          }
-          localWeights.update(neighbours(i), 0)//Resets the neighbour weight for the next iteration
-        }
-
-        neighboursNumber = 0//Resets neighbours number for the next iteration
-        acc = 0//Reset global weight for the next iteration/
-
-        (cont.toDouble, edges)//Returns number of keeped neighbours and the matches
-      }
-    }
-  }
-  
-  
-  def WNPChiSquare(profileBlocksFiltered : RDD[ProfileBlocks],
-                   blockIndex : Broadcast[scala.collection.Map[Long, (Set[Long], Set[Long])]],
-                   maxID : Int,
-                   separatorID : Long,
-                   groundtruth : Broadcast[scala.collection.immutable.Set[(Long, Long)]],
-                   thresholdType : String = ThresholdTypes.AVG,
-                   profileBlocksSizeIndex : Broadcast[scala.collection.Map[Long, Int]],
-                   useEntropy : Boolean = false,
-                   blocksEntropies : Broadcast[scala.collection.Map[Long, Double]] = null,//(block id, entropy)
-                   thresholds : Broadcast[scala.collection.Map[Long, Double]]
-                  )
-  : RDD[(Double, Iterable[UnweightedEdge])] = {
-    profileBlocksFiltered.mapPartitions {partition => //For each partition
-      val totalNumberOfBlocks : Double = blockIndex.value.size.toDouble
-      val localWeights = Array.fill[Double](maxID+1){0}//Contains the neighbours weights
-      val neighbours = Array.ofDim[Int](maxID+1)//Contains the neighbours IDs
-      val entropies : Array[Double] = {
-        if(useEntropy){
-          Array.fill[Double](maxID + 1) {0.0}
-        }
-        else{
-          null
-        }
-      }//Contains the sums of entropies
-      var neighboursNumber = 0//Keeps the number of neighbours
-
-      partition.map{pb => //Maps the elements contained in the partition, they are a list of (profile ID, [blocks which contains the profile])
-        val profileID = pb.profileID//ProfileID
-        val profileBlocks = pb.blocks//Blocks in which it appears
-        val nodeThreshold = thresholds.value(profileID)
-
-        profileBlocks.foreach {block => //Foreach block
-          val blockID = block.blockID//Block ID
-          val blockProfiles = blockIndex.value.get(blockID)//Other profiles in the same block
-          if(blockProfiles.isDefined){//Check if exists
-            val profilesIDs = {//Gets the others profiles IDs
-              if(separatorID >= 0 && profileID <= separatorID){//If we are in a Clean-Clean context and the profile ID is in the first dataset, then his neighbours are in the second dataset
-                blockProfiles.get._2
-              }
-              else{//Otherwise they are in the first dataset
-                blockProfiles.get._1
-              }
-            }
-            val blockEntropy = {
-              if(useEntropy){
-                val e = blocksEntropies.value.get(blockID)
-                if(e.isDefined){
-                  e.get
-                }
-                else{
-                  0.0
-                }
-              }
-              else{
-                0.0
-              }
-            }
-
-            profilesIDs.foreach {secondProfileID => //For each neighbour computes the weight
-              val neighbourID = secondProfileID.toInt//neighbour ID
-              val neighbourWeight = localWeights(neighbourID)+1//New neighbour weight
-              localWeights.update(neighbourID, neighbourWeight)//Update the neighbour weight
-              if(useEntropy){
-                val neighbourEntropy = entropies(neighbourID)+blockEntropy//New neighbour entropy
-                entropies.update(neighbourID, neighbourEntropy)//Update the neighbour entropy
-              }
-              if(neighbourWeight == 1){//If its equal to 1 mean that this neighbour it is the first time that this neighbour appears
-                neighbours.update(neighboursNumber, neighbourID)//Add the neighbour to the neighbours list
-                neighboursNumber += 1//Increment the number of neighbour
-              }
-            }
-          }
-        }
-
-        var cont = 0//Counts the number of keeped neighbour
-
-        for(i <- 0 to neighboursNumber-1){//Computes the Jaccard Similarity
-          val neighbourID = neighbours(i)//Neighvbour ID
-          val CBS : Double = localWeights(neighbourID)//Number of common blocks between this neighbour
-          val neighbourNumBlocks : Double = profileBlocksSizeIndex.value(neighbourID)
-          val currentProfileNumBlocks : Double = profileBlocks.size
-
-          val CMat = Array.ofDim[Double](3,3)
-          CMat(0)(0) = CBS
-          CMat(0)(1) = neighbourNumBlocks-CBS
-          CMat(0)(2) = neighbourNumBlocks
-
-          CMat(1)(0) = currentProfileNumBlocks-CBS
-          CMat(1)(1) = totalNumberOfBlocks-(neighbourNumBlocks+currentProfileNumBlocks-CBS)
-          CMat(1)(2) = totalNumberOfBlocks-neighbourNumBlocks
-
-          CMat(2)(0) = currentProfileNumBlocks
-          CMat(2)(1) = totalNumberOfBlocks - currentProfileNumBlocks
-
-          var weight : Double = 0
-          var expectedValue : Double = 0
-          for(i <- 0 to 1){
-            for(j <- 0 to 1){
-              expectedValue = (CMat(i)(2)*CMat(2)(j))/totalNumberOfBlocks
-              weight += Math.pow((CMat(i)(j)-expectedValue),2)/expectedValue
-            }
-          }
-
-          /*val CMat = Array.ofDim[Long](2,2)
-          CMat(0)(0) = CBS.toLong
-          CMat(0)(1) = (neighbourNumBlocks-CBS).toLong
-
-          CMat(1)(0) = (currentProfileNumBlocks-CBS).toLong
-          CMat(1)(1) = (totalNumberOfBlocks-(neighbourNumBlocks+currentProfileNumBlocks-CBS)).toLong
-
-
-          val chisquare = new ChiSquareTest()
-
-          var weight : Double = chisquare.chiSquare(CMat)*/
-
-          if(useEntropy){
-            weight = weight * entropies(neighbourID)
-          }
-
-          localWeights.update(neighbourID, weight)//Update the local neighbour weight
-      }
-
-        var edges : List[UnweightedEdge] = Nil
-
-        for(i <- 0 to neighboursNumber-1) {//For each neighbour
-
-          //val threshold = (thresholds.value(neighbours(i))+nodeThreshold)/2
-          val threshold = Math.sqrt(Math.pow(thresholds.value(neighbours(i)), 2)+Math.pow(nodeThreshold, 2))/4.0
-
-          if(localWeights(neighbours(i)) >= threshold && profileID < neighbours(i)){//If the  neighbour has a weight greater than the threshold
-            cont += 1//Increments the counter that keep the number of keeped neighbours
-            if(groundtruth.value.contains((profileID, neighbours(i)))){//If this elements is in the groundtruth
-              edges = UnweightedEdge(profileID, neighbours(i)) :: edges //Generates the edge to keep
-            }
-          }
-          localWeights.update(neighbours(i), 0)//Resets the neighbour weight for the next iteration
-          if(useEntropy){
-            entropies.update(neighbours(i), 0)//Resets the entropy weight
-          }
-        }
-
-        neighboursNumber = 0//Resets neighbours number for the next iteration
-
-        (cont.toDouble, edges)//Returns number of keeped neighbours and the matches
-      }
-    }
-  }
-
-  def WNPChiSquare1(profileBlocksFiltered : RDD[ProfileBlocks],
-                   blockIndex : Broadcast[scala.collection.Map[Long, (Set[Long], Set[Long])]],
-                   maxID : Int,
-                   separatorID : Long,
-                   groundtruth : Broadcast[scala.collection.immutable.Set[(Long, Long)]],
-                   thresholdType : String = ThresholdTypes.AVG,
-                   profileBlocksSizeIndex : Broadcast[scala.collection.Map[Long, Int]],
-                   useEntropy : Boolean = false,
-                   blocksEntropies : Broadcast[scala.collection.Map[Long, Double]] = null//(block id, entropy)
-                  )
-  : RDD[(Long, Double)] = {
-    profileBlocksFiltered.mapPartitions {partition => //For each partition
-      val totalNumberOfBlocks : Double = blockIndex.value.size.toDouble
-      val localWeights = Array.fill[Double](maxID+1){0}//Contains the neighbours weights
-      val neighbours = Array.ofDim[Int](maxID+1)//Contains the neighbours IDs
-      val entropies = {
-        if(useEntropy){
-          Array.fill[Double](maxID + 1) {0.0}
-        }
-        else{
-          Array.fill[Double](0) {0.0}
-        }
-      }//Contains the sums of entropies
-      var neighboursNumber = 0//Keeps the number of neighbours
-      var acc : Double = 0//Accumulator, used to compute the AVG or to keep the local maximum
-
-      partition.map{pb => //Maps the elements contained in the partition, they are a list of (profile ID, [blocks which contains the profile])
-        val profileID = pb.profileID//ProfileID
-        val profileBlocks = pb.blocks//Blocks in which it appears
-
-        profileBlocks.foreach {block => //Foreach block
-          val blockID = block.blockID//Block ID
-          val blockProfiles = blockIndex.value.get(blockID)//Other profiles in the same block
-          if(blockProfiles.isDefined){//Check if exists
-            val profilesIDs = {//Gets the others profiles IDs
-              if(separatorID >= 0 && profileID <= separatorID){//If we are in a Clean-Clean context and the profile ID is in the first dataset, then his neighbours are in the second dataset
-                blockProfiles.get._2
-              }
-              else{//Otherwise they are in the first dataset
-                blockProfiles.get._1
-              }
-            }
-            val blockEntropy = {
-              if(useEntropy){
-                val e = blocksEntropies.value.get(blockID)
-                if(e.isDefined){
-                  e.get
-                }
-                else{
-                  0.0
-                }
-              }
-              else{
-                0.0
-              }
-            }
-
-            profilesIDs.foreach {secondProfileID => //For each neighbour computes the weight
-              val neighbourID = secondProfileID.toInt//neighbour ID
-              val neighbourWeight = localWeights(neighbourID)+1//New neighbour weight
-              localWeights.update(neighbourID, neighbourWeight)//Update the neighbour weight
-              if(useEntropy){
-                val neighbourEntropy = entropies(neighbourID)+blockEntropy//New neighbour entropy
-                entropies.update(neighbourID, neighbourEntropy)//Update the neighbour entropy
-              }
-              if(neighbourWeight == 1){//If its equal to 1 mean that this neighbour it is the first time that this neighbour appears
-                neighbours.update(neighboursNumber, neighbourID)//Add the neighbour to the neighbours list
-                neighboursNumber += 1//Increment the number of neighbour
-              }
-            }
-          }
-        }
-
-        var cont = 0//Counts the number of keeped neighbour
-
-        for(i <- 0 to neighboursNumber-1){//Computes the Jaccard Similarity
-          val neighbourID = neighbours(i)//Neighvbour ID
-          val CBS : Double = localWeights(neighbourID)//Number of common blocks between this neighbour
-          val neighbourNumBlocks : Double = profileBlocksSizeIndex.value(neighbourID)
-          val currentProfileNumBlocks : Double = profileBlocks.size
-
-          val CMat = Array.ofDim[Double](3,3)
-          CMat(0)(0) = CBS
-          CMat(0)(1) = neighbourNumBlocks-CBS
-          CMat(0)(2) = neighbourNumBlocks
-
-          CMat(1)(0) = currentProfileNumBlocks-CBS
-          CMat(1)(1) = totalNumberOfBlocks-(neighbourNumBlocks+currentProfileNumBlocks-CBS)
-          CMat(1)(2) = totalNumberOfBlocks-neighbourNumBlocks
-
-          CMat(2)(0) = currentProfileNumBlocks
-          CMat(2)(1) = totalNumberOfBlocks - currentProfileNumBlocks
-
-          var weight : Double = 0
-
-
-          var expectedValue : Double = 0
-          for(i <- 0 to 1){
-            for(j <- 0 to 1){
-              expectedValue = (CMat(i)(2)*CMat(2)(j))/totalNumberOfBlocks
-              weight += Math.pow((CMat(i)(j)-expectedValue),2)/expectedValue
-            }
-          }
-
-
-          /*
-          val CMat = Array.ofDim[Long](2,2)
-          CMat(0)(0) = CBS.toLong
-          CMat(0)(1) = (neighbourNumBlocks-CBS).toLong
-
-          CMat(1)(0) = (currentProfileNumBlocks-CBS).toLong
-          CMat(1)(1) = (totalNumberOfBlocks-(neighbourNumBlocks+currentProfileNumBlocks-CBS)).toLong
-
-
-          val chisquare = new ChiSquareTest()
-
-          var weight : Double = chisquare.chiSquare(CMat)*/
-
-          if(useEntropy){
-            weight = weight * entropies(neighbourID)
-            entropies.update(neighbours(i), 0)//Resets the entropy weight
-          }
-
-          localWeights.update(neighbours(i), 0)//Resets the neighbour weight for the next iteration
-
-          if(thresholdType == ThresholdTypes.AVG){//If the threshold it is the AVG sums all the weights
-            acc += weight
-          }
-          else if(weight > acc){//Else if max/2 compute the local maximum
-            acc = weight
-          }
-        }
-
-        val threshold : Double = {//Pruning threshold
-          if(thresholdType == ThresholdTypes.AVG){
-            acc/neighboursNumber.toDouble
-          }
-          else{
-            acc/2.0
-          }
-        }
-
-        neighboursNumber = 0//Resets neighbours number for the next iteration
-        acc = 0//Reset global weight for the next iteration/
-
-        (profileID, threshold)//Returns number of keeped neighbours and the matches
-      }
-    }
-  }
-
 }

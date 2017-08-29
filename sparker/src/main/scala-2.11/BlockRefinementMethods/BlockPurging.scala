@@ -44,6 +44,10 @@ object BlockPurging {
     //Calculate the maximum numbers of allowed comparisons
     val maximumNumberOfComparisonAllowed = calcMaxComparisonNumber(totalNumberOfComparisonsAndSizePerComparisonLevelSortedAdded.toArray, smoothFactor)
 
+    val log = org.apache.log4j.Logger.getRootLogger
+
+    log.info("SPARKER - BLOCK PURGING COMPARISONS MAX "+maximumNumberOfComparisonAllowed)
+
     //Retains only the blocks with a comparison level less or equal the calculated one
     blocks filter{
       block =>

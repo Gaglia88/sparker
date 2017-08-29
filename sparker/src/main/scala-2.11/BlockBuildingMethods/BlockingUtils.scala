@@ -1,6 +1,7 @@
 package BlockBuildingMethods
 
-import DataStructures.{KeyValue, BlockAbstract, Profile}
+import BlockBuildingMethods.LSHTwitter.Settings
+import DataStructures.{BlockAbstract, KeyValue, Profile}
 import org.apache.spark.rdd.RDD
 
 /**
@@ -36,5 +37,13 @@ object BlockingUtils {
     val profileId = profileKs._1
     val tokens = profileKs._2
     tokens.map(tokens => (tokens, (profileId, tokens.map(_.hashCode))))
+  }
+
+  /**
+    * Given the separator ID and the profile ID returns the proper
+    * dataset prefix
+    * */
+  def getPrefix(profileID : Long, separatorID: Long) : String = {
+    if (profileID <= separatorID) Settings.FIRST_DATASET_PREFIX else Settings.SECOND_DATASET_PREFIX //Calculate the datasetID of the profile
   }
 }
