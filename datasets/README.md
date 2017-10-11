@@ -1,4 +1,0 @@
-These folder contains three big datasets.
-- Citations is taken from The Magellan Data Repository (https://sites.google.com/site/anhaidgroup/useful-stuff/data). It is distributed under the Creative Commons Attribution-NonCommercial-ShareAlike 3.0 Unported License. It contains two CSV of citations derived from Citeseer and DBLP, and the groundtruth.
-- DBpedia is derived from the dataset distributed here https://sourceforge.net/projects/erframework/files/CleanCleanERDatasets/DBPedia/. It contains two JSON that represents two snapshot of DBpedia taken at different times, and the groundtruth.
-- Freebase is derived from the Billion Triple Challenge 2012 Dataset (https://km.aifb.kit.edu/projects/btc-2012/) that was distributed as a RDF N-Quads. It contains two JSON, one contains the data of DBpedia 3.7, the other one the data of Freebase. We generated the groundtruth using the sameAs statements that links the istances between the two datasets.
