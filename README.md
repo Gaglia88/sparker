@@ -8,7 +8,7 @@ SparkER implements for Spark the Meta-Blocking techniques described in Simonini 
 
 The process is composed by different stages
 1. ***Profile loading***: loads the data (supports csv, json and serialized formats) into entity profiles;
-2. ***Blocking***: performs the blocking, token blocking or Loose Schema Blocking [2];
+2. ***Blocking***: performs the blocking, token blocking or Loose Schema Blocking [1];
 4. ***Block purging***: removes the biggest blocks that are, usually, stopwords or very common tokens that do not provide significant relations [4];
 5. ***Block filtering***: for each entity profile, filters out the biggest blocks [3];
 6. ***Meta-blocking***: performs the meta-blocking, producing as results the list of candidates pairs that could be matches.
