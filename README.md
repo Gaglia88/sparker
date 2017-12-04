@@ -1,10 +1,8 @@
-<p style="text-align: center;">
 # SparkER
 _SparkER is an Entity Resolution framework developed in Scala for Apache Spark._
-</p>
 
 SparkER implements for Spark the Meta-Blocking techniques described in Simonini et al. [1] and Papadakis et al. [2].
-![Stages](/img/img.jpg?raw=true "Stages")
+[![stages](/img/img.jpg)](#stages)
 
 ### Datasets
 To test SparkER we provide a set of datasets that can be downloaded [here](https://sourceforge.net/projects/sparker/files/). It is also possible to use the [datasets](https://sourceforge.net/projects/erframework/files/) proposed in [2].
