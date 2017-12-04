@@ -16,7 +16,9 @@ import org.apache.spark.ml.linalg._
 import org.apache.spark.sql.types._
 
 /**
-  * Created by Luca on 10/01/2017.
+  * @author Luca Gagliardelli
+  * @since 10/01/2017
+  * Computes the clustering with LSH using the methods provided by Spark
   */
 object LSHSpark {
 

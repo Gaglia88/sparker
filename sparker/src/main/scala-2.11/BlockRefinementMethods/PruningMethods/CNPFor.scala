@@ -9,6 +9,9 @@ import org.apache.spark.rdd.RDD
 
 /**
   * Created by Luca on 04/08/2017.
+  * @author Luca Gagliardelli
+  * @since 04/08/2017
+  * Performs the CNP
   */
 object CNPFor {
 
@@ -50,6 +53,14 @@ object CNPFor {
 
     if ((weightType == WeightTypes.ECBS || weightType == WeightTypes.EJS || weightType == WeightTypes.JS || weightType == WeightTypes.chiSquare) && profileBlocksSizeIndex == null) {
       throw new Exception("profileBlocksSizeIndex must be defined")
+    }
+
+    if(!List(WeightTypes.CBS, WeightTypes.JS, WeightTypes.chiSquare, WeightTypes.ARCS, WeightTypes.ECBS, WeightTypes.EJS).contains(weightType)){
+      throw new Exception("Please provide a valid WeightType, "+weightType+" is not an acceptable value!")
+    }
+
+    if(!List(PruningUtils.ComparisonTypes.OR, PruningUtils.ComparisonTypes.AND).contains(comparisonType)){
+      throw new Exception("Please provide a valid ComparisonType, "+comparisonType+" is not an acceptable value!")
     }
 
     val sc = SparkContext.getOrCreate()

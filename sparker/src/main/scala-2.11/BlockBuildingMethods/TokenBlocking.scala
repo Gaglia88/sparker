@@ -1,6 +1,7 @@
 package BlockBuildingMethods
 
 import DataStructures._
+import org.apache.log4j.LogManager
 import org.apache.spark.SparkContext
 import org.apache.spark.ml.feature.StopWordsRemover
 import org.apache.spark.rdd.RDD
@@ -80,7 +81,7 @@ object TokenBlocking {
     * @param keysToExclude keys to exclude from the blocking process
     * @return the blocks
     */
-  def createBlocksCluster(profiles : RDD[Profile], separatorID: Long, clusters : List[KeysCluster], keysToExclude : Iterable[String] = Nil) : RDD[BlockAbstract] = {
+  def createBlocksCluster(profiles : RDD[Profile], separatorID: Long, clusters : List[KeysCluster], keysToExclude : Iterable[String] = Nil, excludeDefaultCluster : Boolean = false) : RDD[BlockAbstract] = {
     /** Obtains the ID of the default cluster: all the elements that are not in other clusters finish in this one */
     val defaultClusterID = clusters.filter(_.keys.contains(LSHTwitter.Settings.DEFAULT_CLUSTER_NAME)).head.id
     /** Creates a map that contains the entropy for each cluster */
@@ -113,7 +114,14 @@ object TokenBlocking {
     }
 
     /* Associate each profile to each token, produces (tokenID, [list of profileID]) */
-    val profilePerKey = tokensPerProfile.flatMap(BlockingUtils.associateKeysToProfileID).groupByKey()
+    val profilePerKey = {
+      if(excludeDefaultCluster){
+        tokensPerProfile.flatMap(BlockingUtils.associateKeysToProfileID).groupByKey().filter(!_._1.endsWith("_"+defaultClusterID))
+      }
+      else{
+        tokensPerProfile.flatMap(BlockingUtils.associateKeysToProfileID).groupByKey()
+      }
+    }
 
     /* For each tokens divides the profiles in two lists according to the original datasets where they come (in case of Clean-Clean) */
     val profilesGrouped = profilePerKey map {

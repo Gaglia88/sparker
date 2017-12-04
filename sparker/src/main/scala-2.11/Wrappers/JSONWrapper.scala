@@ -22,7 +22,8 @@ object JSONWrapper {
     * */
   def loadProfiles(filePath : String, startIDFrom : Long = 0, realIDField : String = "") : RDD[Profile] = {
     val sc = SparkContext.getOrCreate()
-    val raw = sc.textFile(filePath)
+    val raw = sc.textFile(filePath, sc.defaultParallelism)
+
     raw.zipWithIndex().map{ case(row, id) =>
       val obj = new JSONObject(row)
       val realID = {

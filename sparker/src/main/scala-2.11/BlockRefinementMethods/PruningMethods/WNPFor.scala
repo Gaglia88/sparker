@@ -2,12 +2,16 @@ package BlockRefinementMethods.PruningMethods
 
 import BlockRefinementMethods.PruningMethods.PruningUtils.WeightTypes
 import DataStructures.{ProfileBlocks, UnweightedEdge}
+//import org.apache.log4j.LogManager
 import org.apache.spark.SparkContext
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 
 /**
   * Created by Luca on 03/05/2017.
+  * @author Luca Gagliardelli
+  * @since 03/05/2017
+  * Performs the WNP
   */
 object WNPFor {
   /**
@@ -49,6 +53,14 @@ object WNPFor {
       throw new Exception("profileBlocksSizeIndex must be defined")
     }
 
+    if(!List(WeightTypes.CBS, WeightTypes.JS, WeightTypes.chiSquare, WeightTypes.ARCS, WeightTypes.ECBS, WeightTypes.EJS).contains(weightType)){
+      throw new Exception("Please provide a valid WeightType, "+weightType+" is not an acceptable value!")
+    }
+
+    if(!List(PruningUtils.ComparisonTypes.OR, PruningUtils.ComparisonTypes.AND).contains(comparisonType)){
+      throw new Exception("Please provide a valid ComparisonType, "+comparisonType+" is not an acceptable value!")
+    }
+
     val sc = SparkContext.getOrCreate()
     var numberOfEdges: Double = 0
     var edgesPerProfile: Broadcast[scala.collection.Map[Long, Double]] = null
@@ -60,6 +72,7 @@ object WNPFor {
     }
 
     val thresholds = sc.broadcast(calcThresholds(profileBlocksFiltered, blockIndex, maxID, separatorID, thresholdType, weightType, profileBlocksSizeIndex, useEntropy, blocksEntropies, numberOfEdges, edgesPerProfile).collectAsMap())
+
     val edges = pruning(profileBlocksFiltered, blockIndex, maxID, separatorID, groundtruth, thresholdType, weightType, profileBlocksSizeIndex, useEntropy, blocksEntropies, chi2divider, comparisonType, thresholds, numberOfEdges, edgesPerProfile)
 
     thresholds.unpersist()
@@ -132,6 +145,8 @@ object WNPFor {
     var edges: List[UnweightedEdge] = Nil
     val profileThreshold = thresholds.value(profileID)
 
+    //@transient lazy val log = LogManager.getRootLogger
+
     if (weightType == WeightTypes.chiSquare) {
       for (i <- 0 to neighboursNumber - 1) {
         val neighbourID = neighbours(i)
@@ -141,7 +156,10 @@ object WNPFor {
 
         if (neighbourWeight >= threshold) {
           cont += 1
-          if (groundtruth.value.contains((profileID, neighbourID))) {
+          if(groundtruth == null){
+            edges = UnweightedEdge(profileID, neighbours(i)) :: edges
+          }
+          else if (groundtruth.value.contains((profileID, neighbourID))) {
             edges = UnweightedEdge(profileID, neighbours(i)) :: edges
           }
         }
@@ -157,11 +175,18 @@ object WNPFor {
           (comparisonType == PruningUtils.ComparisonTypes.AND && neighbourWeight >= neighbourThreshold && neighbourWeight >= profileThreshold)
             || (comparisonType == PruningUtils.ComparisonTypes.OR && (neighbourWeight >= neighbourThreshold || neighbourWeight >= profileThreshold))
         ) {
+          //log.info("SPARKER - Id mio "+profileID+", ID vicino "+neighbourID+", soglia vicino "+neighbourThreshold+", peso vicino "+neighbourWeight+", soglia mia "+profileThreshold+", comparison type "+comparisonType+" ----> lo tengo")
           cont += 1
-          if (groundtruth.value.contains((profileID, neighbourID))) {
+          if(groundtruth == null){
             edges = UnweightedEdge(profileID, neighbours(i)) :: edges
           }
-        }
+          else if (groundtruth.value.contains((profileID, neighbourID))) {
+            edges = UnweightedEdge(profileID, neighbours(i)) :: edges
+          }
+        }/*
+        else{
+          log.info("SPARKER - Id mio "+profileID+", ID vicino "+neighbourID+", soglia vicino "+neighbourThreshold+", peso vicino "+neighbourWeight+", soglia mia "+profileThreshold+", comparison type "+comparisonType+" ----> Non lo tengo")
+        }*/
       }
     }
 
