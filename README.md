@@ -3,6 +3,7 @@ _An Entity Resolution framework developed in Scala for Apache Spark._
 
 ### Entity Resolution
 Entity Resolution (ER) is the task to identify if different records pertain to the same real-world entity. It has a very low efficiency, because it has a quadratic complexity: each record has to be compared with all others. Moreover, the problem of the low efficiency is accentuated in the context of Big Data, when the profiles to compare can be in the order of hundreds of millions. To reduce this complexity usually ER uses different blocking techniques (e.g. token blocking, n-grams, etc.) to create clusters of profiles (called blocks). The goal of this process is to reduce the global number of comparisons, because will be compared only the profiles that are in the same blocks.
+
 Unfortunately, in the Big Data context the blocking techniques still produces too many comparisons to be managed in a reasonable time, to reduce more the number of comparison the meta-blocking techniques was introduced [2]. The idea is to create a graph using the information learned from the blocks: the profiles in the blocks represents the nodes of the graph, and the comparisons between them represents the edges. Then is possible to calculate some metrics on the graph and use them to pruning the less significant edges.
 
 ### Entity Resolution for Spark
