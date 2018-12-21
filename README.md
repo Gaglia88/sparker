@@ -28,10 +28,12 @@ For any questions about SparkER write us at name.surname@unimore.it
 * Song Zhu
 
 ### References
-[1] Simonini, G., Bergamaschi, S., & Jagadish, H. V. (2016). BLAST: a Loosely Schema-aware Meta-blocking Approach for Entity Resolution. Pvldb, 9(12), 1173–1184.
+[1] Simonini, G., Bergamaschi, S., & Jagadish, H. V. (2016). BLAST: a Loosely Schema-aware Meta-blocking Approach for Entity Resolution. Pvldb, 9(12), 1173–1184. [link](http://www.vldb.org/pvldb/vol9/p1173-simonini.pdf)
 
 [2] Papadakis, G., Koutrika, G., Palpanas, T., & Nejdl, W. (2014). Meta-blocking: Taking entity resolution to the next level. IEEE.
 
 [3] Papadakis, G., Papastefanatos, G., Palpanas, T., Koubarakis, M., & Green, E. L. (2016). Scaling Entity Resolution to Large , Heterogeneous Data with Enhanced Meta-blocking, 221–232. Transactions on Knowledge and Data Engineering, 26(8), 1946–1960.
 
 [4] Papadakis, G., Ioannou, E., Niederée, C., & Fankhauser, P. (2011). Efficient entity resolution for large heterogeneous information spaces. Proceedings of the Fourth ACM International Conference on Web Search and Data Mining - WSDM ’11, 535.
+
+[5] Gagliardelli, L., Zhu, S., Simonini, G., & Bergamaschi, S. (2018). Bigdedup: a Big Data integration toolkit for duplicate detection in industrial scenarios. In 25th International Conference on Transdisciplinary Engineering (TE2018) (Vol. 7, pp. 1015-1023). [link](https://iris.unimore.it/retrieve/handle/11380/1165040/201434/ATDE7-1015.pdf)
