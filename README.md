@@ -4,6 +4,7 @@ _An Entity Resolution framework developed in Scala for Apache Spark._
 ---
 
 If use this library, please cite:
+
 **"SparkER: Scaling Entity Resolution in Spark", Luca Gagliardelli, Giovanni Simonini, Domenico Beneventano and Sonia Bergamaschi. EDBT 2019.**
 
 ---
