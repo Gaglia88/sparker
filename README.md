@@ -1,6 +1,13 @@
 # SparkER
 _An Entity Resolution framework developed in Scala for Apache Spark._
 
+---
+
+If use this library, please cite:
+**"SparkER: Scaling Entity Resolution in Spark", Luca Gagliardelli, Giovanni Simonini, Domenico Beneventano and Sonia Bergamaschi. EDBT 2019.**
+
+---
+
 ### Entity Resolution
 Entity Resolution (*ER*) is the task of identifying different records (a.k.a. entity *profiles*) that pertain to the same real-world entity. Comparing all the possible pairs of records in a data set may be very inefficient (quadratic complexity), in particular in the context of Big Data, e.g., when the records to compare are hundreds of millions. To reduce this complexity, usually ER uses different blocking techniques (e.g. token blocking, n-grams, etc.) to create clusters of profiles (called blocks). The goal of this process is to reduce the global number of comparisons, because will be compared only the records that are in the same blocks.
 
@@ -28,11 +35,11 @@ For any questions about SparkER write us at name.surname@unimore.it
 * Song Zhu
 
 ### References
-[1] Simonini, G., Bergamaschi, S., & Jagadish, H. V. (2016). BLAST: a Loosely Schema-aware Meta-blocking Approach for Entity Resolution. Pvldb, 9(12), 1173–1184. [link](http://www.vldb.org/pvldb/vol9/p1173-simonini.pdf)
+[1] Simonini, G., Bergamaschi, S., & Jagadish, H. V. (2016). BLAST: a Loosely Schema-aware Meta-blocking Approach for Entity Resolution. PVLDB, 9(12), 1173–1184. [link](http://www.vldb.org/pvldb/vol9/p1173-simonini.pdf)
 
-[2] Papadakis, G., Koutrika, G., Palpanas, T., & Nejdl, W. (2014). Meta-blocking: Taking entity resolution to the next level. IEEE.
+[2] Papadakis, G., Koutrika, G., Palpanas, T., & Nejdl, W. (2014). Meta-blocking: Taking entity resolution to the next level. IEEE TKDE.
 
-[3] Papadakis, G., Papastefanatos, G., Palpanas, T., Koubarakis, M., & Green, E. L. (2016). Scaling Entity Resolution to Large , Heterogeneous Data with Enhanced Meta-blocking, 221–232. Transactions on Knowledge and Data Engineering, 26(8), 1946–1960.
+[3] Papadakis, G., Papastefanatos, G., Palpanas, T., Koubarakis, M., & Green, E. L. (2016). Scaling Entity Resolution to Large , Heterogeneous Data with Enhanced Meta-blocking, 221–232. IEEE TKDE.
 
 [4] Papadakis, G., Ioannou, E., Niederée, C., & Fankhauser, P. (2011). Efficient entity resolution for large heterogeneous information spaces. Proceedings of the Fourth ACM International Conference on Web Search and Data Mining - WSDM ’11, 535.
 
