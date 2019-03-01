@@ -113,10 +113,10 @@ The WNP function returns an RDD that contains for each partition _<number of can
 It is possible to process it to obtain the precision and recall of the method and the set of candidate pairs.
 
 ```python
-match_found = results.map(lambda x: x[1]).sum()
+match_found = float(results.map(lambda x: x[1]).sum())
 num_edges = results.map(lambda x: x[0]).sum()
 candidate_set = results.flatMap(lambda x: x[2])
-pc = float(match_found)/len(newGT.value)
-pq = float(match_found) / num_edges
-print("Precision: "+str(pc)+", Recall: "+str(pq))
+pc = match_found / len(newGT.value)
+pq = match_found / num_edges
+print("Recall: "+str(pc)+", Precision: "+str(pq))
 ```
