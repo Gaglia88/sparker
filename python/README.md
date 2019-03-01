@@ -69,3 +69,54 @@ After the blocking, it is possible to apply the block purging and filtering
 blocksPurged = sparker.BlockPurging.blockPurging(blocks, 1.005)
 (profileBlocks, profileBlocksFiltered, blocksAfterFiltering) = sparker.BlockFiltering.blockFilteringQuick(blocksPurged, 0.8, separatorIDs)
 ```
+
+### Meta-blocking
+Some data structures are required to perform the meta-blocking.
+```python
+blockIndexMap = blocksAfterFiltering.map(lambda b : (b.blockID, b.profiles)).collectAsMap()
+blockIndex = sc.broadcast(blockIndexMap)
+profileBlocksSizeIndex = sc.broadcast(profileBlocksFiltered.map(lambda pb : (pb.profileID, len(pb.blocks))).collectAsMap())
+```
+
+If the loose-schema-aware blocking was used it is possible to use the blocks entropies to improve the meta-blocking
+```python
+entropiesMap = blocks.map(lambda b : (b.blockID, b.entropy)).collectAsMap()
+entropies = sc.broadcast(entropiesMap)
+```
+
+Otherwise it can be set to None
+```python
+entropies = None
+```
+
+Finally, the meta-blocking can be performed.
+
+```python
+use_entropy = True
+results = sparker.WNP.wnp(profileBlocksFiltered,
+                          blockIndex,
+                          maxProfileID,
+                          separatorIDs,
+                          newGT,
+                          sparker.ThresholdTypes.AVG,#Threshold type
+                          sparker.WeightTypes.CBS,#Weighting schema
+                          profileBlocksSizeIndex,
+                          use_entropy,
+                          entropies, 
+                          2.0,#Blast c parameter
+                          sparker.ComparisonTypes.OR#Pruning strategy
+                         )
+```
+
+The WNP function returns an RDD that contains for each partition _<number of candidate pairs, number of pairs found in the groundtruth (if provided), [candidate pairs]>_
+
+It is possible to process it to obtain the precision and recall of the method and the set of candidate pairs.
+
+```python
+match_found = results.map(lambda x: x[1]).sum()
+num_edges = results.map(lambda x: x[0]).sum()
+candidate_set = results.flatMap(lambda x: x[2])
+pc = float(match_found)/len(newGT.value)
+pq = float(match_found) / num_edges
+print("Precision: "+str(pc)+", Recall: "+str(pq))
+```
