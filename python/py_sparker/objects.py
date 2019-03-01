@@ -34,6 +34,7 @@ class Profile(object):
 	def __str__(self):
 		return str(self.__dict__)
 
+
 class MatchingEntities(object):
 	"""
 	Represents two matching entities
@@ -76,7 +77,8 @@ class KeyValue(object):
 	
 	def __str__(self):
 		return str(self.__dict__)
-		
+
+
 class BlockClean(object):
 	"""
 	Represents a clean block (i.e. the number of data sources is greater than 1)
@@ -134,7 +136,8 @@ class BlockClean(object):
 	
 	def __str__(self):
 		return str(self.__dict__)
-			
+
+
 class BlockDirty(object):
 	"""
 	Represents a clean block (i.e. the number of data sources is greater than 1)
@@ -179,7 +182,8 @@ class BlockDirty(object):
 	
 	def __str__(self):
 		return str(self.__dict__)
-		
+
+
 class BlockWithComparisonSize(object):
 	"""
 	Represents a block with the number of comparisons involved by the block
@@ -197,7 +201,8 @@ class BlockWithComparisonSize(object):
 	
 	def __str__(self):
 		return str(self.__dict__)
-		
+
+
 class ProfileBlocks(object):
 	"""
 	Represents a profile with the list of blocks in which it is contained
@@ -215,7 +220,8 @@ class ProfileBlocks(object):
 	
 	def __str__(self):
 		return "{profileID: "+str(self.profileID)+", blocks: "+str(self.blocks)+"}"
-		
+
+
 class KeysCluster(object):
 	"""
 	Represents a cluster of attributes.
