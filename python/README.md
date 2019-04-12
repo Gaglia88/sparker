@@ -15,6 +15,7 @@ profiles1 = sparker.CSVWrapper.loadProfiles('fodors.csv', header = True, realIDF
 separatorID = profiles1.map(lambda profile: profile.profileID).max()
 profiles2 = sparker.CSVWrapper.loadProfiles('zagats.csv', header = True, realIDField = "id", startIDFrom = separatorID+1, sourceId=1)
 separatorIDs = [separatorID]
+maxProfileID = profiles2.map(lambda profile: profile.profileID).max()
 profiles = profiles1.union(profiles2)
 ```
 
