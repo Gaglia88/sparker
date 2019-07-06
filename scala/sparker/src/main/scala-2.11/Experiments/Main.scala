@@ -83,7 +83,7 @@ object Main {
     val useEntropy = false
 
     //Loose meta-blocking
-    /*val clusters = LSHMio.clusterSimilarAttributes(
+    /*val clusters = LSH.clusterSimilarAttributes(
       profiles = profiles,
       numHashes = 128,
       targetThreshold = 0.3,
