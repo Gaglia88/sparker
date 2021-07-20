@@ -5,7 +5,7 @@ _An Entity Resolution framework developed in Scala for Apache Spark._
 
 If use this library, please cite:
 
-'''
+```
 @inproceedings{sparker,
   author    = {Luca Gagliardelli and
                Giovanni Simonini and
@@ -20,7 +20,7 @@ If use this library, please cite:
   year      = {2019},
   doi       = {10.5441/002/edbt.2019.66}
 }
-'''
+```
 
 ---
 
