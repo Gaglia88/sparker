@@ -5,11 +5,20 @@ _An Entity Resolution framework developed in Scala for Apache Spark._
 
 If use this library, please cite:
 
-- **G. Simonini, S. Bergamaschi, & H. V. Jagadish (2016). BLAST: a Loosely Schema-aware Meta-blocking Approach for Entity Resolution. PVLDB, 9(12), 1173–1184.**
-
-- **L. Gagliardelli, G. Simonini, D. Beneventano & S. Bergamaschi. SparkER: Scaling Entity Resolution in Spark. EDBT 2019.**
-
-- **G. Simonini, L. Gagliardelli, S. Bergamaschi & H. V. Jagadish. Scaling entity resolution: A loosely schema-aware approach. Information Systems (2019).**
+@inproceedings{sparker,
+  author    = {Luca Gagliardelli and
+               Giovanni Simonini and
+               Domenico Beneventano and
+               Sonia Bergamaschi},
+  title     = {SparkER: Scaling Entity Resolution in Spark},
+  booktitle = {Advances in Database Technology - 22nd International Conference on
+               Extending Database Technology, {EDBT} 2019, Lisbon, Portugal, March
+               26-29, 2019},
+  pages     = {602--605},
+  publisher = {OpenProceedings.org},
+  year      = {2019},
+  doi       = {10.5441/002/edbt.2019.66}
+}
 
 ---
 
