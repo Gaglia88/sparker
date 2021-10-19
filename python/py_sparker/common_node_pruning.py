@@ -241,7 +241,7 @@ def calcWeights(pb, weights, neighbors, entropies, neighborsNumber, blockIndex, 
                     pass
 
             weights[neighbourID] = ejs
-    else:
+    elif weightType == WeightTypes.ECBS:
         blocksNumber = len(blockIndex.value)
         numberOfProfileBlocks = len(pb.blocks)
         for i in range(0, neighborsNumber):
