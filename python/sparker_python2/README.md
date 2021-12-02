@@ -2,7 +2,7 @@
 Through this library it is possible to use the blocking/meta-blocking with PySpark. 
 Both schema-agnostic blocking and Loose-Schema-Aware blocking are implemented.
 
-*Note: this version supports only Python 2*
+**Note: this version supports Python 2 only**
 
 ## Usage
 First import the sparker library
