@@ -15,4 +15,4 @@ To install SparkER as a library:
 If you do not want to install it, you can install the required dependencies by running `pip install -r requirements.txt` and then import SparkER directly from the main folder.
 
 ## Usage
-Several tutorials showing how to use SparkER are inside the [examples](/examples) folder.
+Several tutorials showing how to use SparkER are inside the [examples](https://github.com/Gaglia88/sparker/tree/master/python/examples) folder.
