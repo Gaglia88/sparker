@@ -48,7 +48,6 @@ To test SparkER we provide a set of datasets that can be downloaded [here](https
 For any questions about SparkER write us at name.surname@unimore.it
 * Luca Gagliardelli
 * Giovanni Simonini
-* Song Zhu
 
 ### References
 [1] Simonini, G., Bergamaschi, S., & Jagadish, H. V. (2016). BLAST: a Loosely Schema-aware Meta-blocking Approach for Entity Resolution. PVLDB, 9(12), 1173–1184. [link](http://www.vldb.org/pvldb/vol9/p1173-simonini.pdf)
