@@ -138,10 +138,22 @@ class AttributeClustering(object):
 
         # For each profile produces an RDD of (attribute, token)
         attributes_token = profiles.flatMap(get_tokens)
+
+        def create_combiner(value):
+            return {value}
+
+        def merge_value(combiner, value):
+            combiner.add(value)
+            return combiner
+
+        def merge_combiners(c1, c2):
+            return set.union(c1, c2)
+
         # For each attribute produces an RDD of (token, [attributes]), to each token is assigned an unique id,
         # so the final RDD is (token_id, [attribute])
-        attributes_per_token = attributes_token.map(lambda a: (a[1], a[0])).groupByKey().zipWithIndex().map(
-            lambda x: (x[1], set(x[0][1])))
+        attributes_per_token = attributes_token.map(lambda a: (a[1], a[0]))\
+            .combineByKey(create_combiner, merge_value, merge_combiners).zipWithIndex()\
+            .map(lambda x: (x[1], set(x[0][1])))
 
         sc = profiles.context
 
