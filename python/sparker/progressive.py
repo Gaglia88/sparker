@@ -324,35 +324,38 @@ class GSPSN(object):
 
             def inside_map(profile):
                 neighbors_num = 0
-                # Position in which this profile appears
-                positions = position_index.value[profile.profile_id]
-                for pos in positions:
-                    # For each windows
-                    for window_size in range(1, max_window_size + 1):
-                        # Explore the profiles at window distance before and after the current position
-                        for i in [-1, 1]:
-                            w = window_size * i
+                if profile.profile_id in position_index.value:
+                    # Position in which this profile appears
+                    positions = position_index.value[profile.profile_id]
+                    for pos in positions:
+                        # For each windows
+                        for window_size in range(1, max_window_size + 1):
+                            # Explore the profiles at window distance before and after the current position
+                            for i in [-1, 1]:
+                                w = window_size * i
 
-                            # If the position is valid (i.e. >0 and < max neighbor_list)
-                            # if (w > 0 and (pos + w) < len(neighbor_list.value)) or (w < 0 and (pos + w) > 0):
-                            if 0 <= (pos + w) < len(neighbor_list.value):
-                                pi = neighbor_list.value[pos + w]
-                                # If the neighbor is valid
-                                if pi < profile.profile_id and (separator_id < 0 or (
-                                        separator_id > 0 and pi <= separator_id and profile.profile_id > separator_id)):
-                                    # Computes the CBS
-                                    if cbs[pi] == 0:
-                                        neighbors[neighbors_num] = pi
-                                        neighbors_num += 1
+                                # If the position is valid (i.e. >0 and < max neighbor_list)
+                                # if (w > 0 and (pos + w) < len(neighbor_list.value)) or (w < 0 and (pos + w) > 0):
+                                if 0 <= (pos + w) < len(neighbor_list.value):
+                                    pi = neighbor_list.value[pos + w]
+                                    # If the neighbor is valid
+                                    if pi < profile.profile_id and (separator_id < 0 or (
+                                            separator_id > 0 and pi <= separator_id and
+                                            profile.profile_id > separator_id)):
+                                        # Computes the CBS
+                                        if cbs[pi] == 0:
+                                            neighbors[neighbors_num] = pi
+                                            neighbors_num += 1
 
-                                    cbs[pi] += 1
+                                        cbs[pi] += 1
 
-                # Computes the comparisons
-                for i in range(0, neighbors_num):
-                    n_id = neighbors[i]
-                    weight = cbs[n_id] / (len(positions) + len(position_index.value[n_id]) - cbs[n_id])
-                    results.append((-weight, n_id, profile.profile_id))
-                    cbs[n_id] = 0
+                    # Computes the comparisons
+                    for i in range(0, neighbors_num):
+                        n_id = neighbors[i]
+                        if n_id in position_index.value:
+                            weight = cbs[n_id] / (len(positions) + len(position_index.value[n_id]) - cbs[n_id])
+                            results.append((-weight, n_id, profile.profile_id))
+                        cbs[n_id] = 0
 
                 pass
 
