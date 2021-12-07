@@ -13,3 +13,4 @@ from .cnp import CNP
 from .utils import Utils
 from .blocking_strategies import BlockingKeysStrategies
 from .blocking_utils import BlockingUtils
+from .progressive import PPS, GSPSN
