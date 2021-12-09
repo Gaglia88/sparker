@@ -4,11 +4,6 @@ from .blocking_strategies import BlockingKeysStrategies
 from .common_node_pruning import compute_statistics, calc_cbs, calc_weights, do_reset, WeightTypes
 
 
-import numpy as np
-from queue import PriorityQueue
-from sparker.blocking_strategies import BlockingKeysStrategies
-from sparker.common_node_pruning import compute_statistics, calc_cbs, calc_weights, do_reset, WeightTypes
-
 class PPS(object):
     """
     Implements the PPS method proposed in Simonini et. all "Schema-agnostic Progressive Entity Resolution"
