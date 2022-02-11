@@ -14,3 +14,5 @@ from .utils import Utils
 from .blocking_strategies import BlockingKeysStrategies
 from .blocking_utils import BlockingUtils
 from .progressive import PPS, GSPSN
+from .feature_generator import FeatureGenerator
+from .supervised_metablocking import SupervisedMB
