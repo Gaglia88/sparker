@@ -1,4 +1,4 @@
-from .wrappers import CSVWrapper, JSONWrapper
+from .wrappers import CSVWrapper, JSONWrapper, PandasWrapper
 from .objects import Profile, MatchingEntities, KeyValue, BlockClean, BlockDirty, BlockWithComparisonSize, \
     ProfileBlocks, Attr
 from .filters import BlockPurging, BlockFiltering

@@ -132,3 +132,77 @@ class CSVWrapper(object):
         sql_context = SparkSession.builder.getOrCreate()
         df = sql_context.read.option("header", header).option("sep", separator).csv(file_path)
         return df.rdd.map(lambda row: MatchingEntities(row[id1], row[id2]))
+        
+        
+class PandasWrapper(object):
+    """
+    Wrapper to load the profiles from a CSV
+    """
+
+    @staticmethod
+    def load_profiles(pandas_df, start_id_from=0, separator=",", header=True, real_id_field="", source_id=0):
+        """
+        Load the profiles from a CSV file.
+        Returns an RDD of profiles.
+
+        Parameters
+        ----------
+
+        pandas_df : pandas dataframe
+            pandas dataframe
+        start_id_from : int, optional
+            value from which start the profile identifiers
+        separator : string, optional
+            CSV column separator
+        header : boolean, optional
+            if true means that the CSV has an header row
+        real_id_field : str, optional
+            name of the attribute that contain the profile identifier in the CSV
+        source_id : int, optional
+            source identifier
+        """
+        sql_context = SparkSession.builder.getOrCreate()
+        for c in pandas_df.columns:
+            pandas_df[c] = pandas_df[c].astype(str)
+        df = sql_context.createDataFrame(pandas_df)
+        column_names = df.columns
+
+        def row_to_attributes(row):
+            return list(filter(lambda k: not k.is_empty(), [KeyValue(col, row[col]) for col in column_names]))
+
+        def get_profile(data):
+            profile_id = data[1] + start_id_from
+            attributes = data[0]
+            real_id = ""
+            if len(real_id_field) > 0:
+                real_id = "".join(map(lambda a: a.value, filter(lambda a: a.key == real_id_field, attributes))).strip()
+
+            return Profile(profile_id, list(filter(lambda a: a.key != real_id_field, attributes)), real_id, source_id)
+
+        return df.rdd.map(lambda row: row_to_attributes(row)).zipWithIndex().map(lambda x: get_profile(x))
+
+    @staticmethod
+    def load_groundtruth(pandas_df, id1='id1', id2='id2', separator=",", header=True):
+        """
+        Load the groundtruth from a csv file
+        Return an RDD of Matching_entities
+
+        Parameters
+        ----------
+
+        pandas_df : pandas dataframe
+            pandas dataframe
+        id1 : str, optional
+            name of the column that contains the first profile identifier
+        id2 : str, optional
+            name of the column that contains the second profile identifier
+        separator : string, optional
+            CSV column separator
+        header : boolean, optional
+            if true means that the CSV has an header row
+        """
+        sql_context = SparkSession.builder.getOrCreate()
+        for c in pandas_df.columns:
+            pandas_df[c] = pandas_df[c].astype(str)
+        df = sql_context.createDataFrame(pandas_df)
+        return df.rdd.map(lambda row: MatchingEntities(row[id1], row[id2]))
