@@ -132,9 +132,9 @@ class BlockClean(object):
 		if len(a) > 1:
 			comparisons = 0
 			i = 0
-			while i < len(self.profiles):
+			while i < len(a):
 				j = i + 1
-				while j < len(self.profiles):
+				while j < len(a):
 					comparisons += len(a[i]) * len(a[j])
 					j += 1
 				i += 1
