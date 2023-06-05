@@ -110,14 +110,14 @@ class CNP(object):
                                     num_edges += 1
                                     if groundtruth is not None and ((profile_id, neighbor_id) in groundtruth.value):
                                         gt_num += 1
-                                    edges.append((profile_id, neighbor_id))
+                                    edges.append((profile_id, neighbor_id, 0))
                                 elif comparison_type == ComparisonTypes.AND \
                                         and (profile_id in neighbor_retained_neighbors) \
                                         and (neighbor_id in profile_retained_neighbors):
                                     num_edges += 1
                                     if groundtruth is not None and ((profile_id, neighbor_id) in groundtruth.value):
                                         gt_num += 1
-                                    edges.append((profile_id, neighbor_id))
+                                    edges.append((profile_id, neighbor_id, 0))
 
                 for i in range(0, num_neighbors):
                     visited[neighbors[i]] = False
