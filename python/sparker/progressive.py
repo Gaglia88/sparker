@@ -236,7 +236,7 @@ class PPS(object):
         Returns the next top comparison
         :return: top comparison if there is any, otherwise (-1, -1, -1)
         """
-        if self.comparison_list.empty() and self.profiles_list.not_empty:
+        if self.comparison_list.empty() and not self.profiles_list.empty():
             # Single mode
             if self.mini_batch < 0:
                 pi = self.profiles_list.get()[1]
@@ -251,7 +251,7 @@ class PPS(object):
             else:
                 # Mini batch mode
                 # Gets the top profiles to explore
-                pis = [self.profiles_list.get()[1] for _ in range(0, self.mini_batch) if self.profiles_list.not_empty]
+                pis = [self.profiles_list.get()[1] for _ in range(0, self.mini_batch) if not self.profiles_list.empty()]
                 # For every profile gets the top-k comparisons
                 pbf = self.profile_blocks.filter(lambda x: x.profile_id in pis)
                 top_comp = PPS.get_top_comparisons(pbf, self.block_index, self.max_id, self.separator_ids,
@@ -274,7 +274,7 @@ class PPS(object):
                                     self.comparison_list.put((-c[2], c[1], c[0]))
 
         # Returns the top comparison
-        if self.comparison_list.not_empty:
+        if not self.comparison_list.empty():
             return self.comparison_list.get()
         else:
             return -1, -1, -1
