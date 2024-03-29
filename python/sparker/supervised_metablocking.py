@@ -19,8 +19,9 @@ class SupervisedMB(object):
         :param edges: DataFrame of edges with the probability column (p_match)
         :param blocks: original block collection
         """
+        over_t = edges.filter("p_match >= 0.5")
         number_of_edges_to_keep = int(blocks.map(lambda b: b.get_size()).sum()/2)
-        pruned_edges = edges.sort('p_match', ascending=False).limit(number_of_edges_to_keep)
+        pruned_edges = over_t.sort('p_match', ascending=False).limit(number_of_edges_to_keep)
         return pruned_edges
 
     @staticmethod
