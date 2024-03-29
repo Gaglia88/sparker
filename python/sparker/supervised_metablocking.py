@@ -5,6 +5,25 @@ from pyspark.sql.types import BooleanType
 class SupervisedMB(object):
 
     @staticmethod
+    def bcl(edges):
+        """
+        Performs the pruning by using the binary classifier outcome.
+        :param edges: DataFrame of edges with the probability column (p_match)
+        """
+        return edges.filter("is_match == 1")
+
+    @staticmethod
+    def cep(edges, blocks):
+        """
+        Performs the pruning by using the cardinality edge pruning method.
+        :param edges: DataFrame of edges with the probability column (p_match)
+        :param blocks: original block collection
+        """
+        number_of_edges_to_keep = int(blocks.map(lambda b: b.get_size()).sum()/2)
+        pruned_edges = edges.sort('p_match', ascending=False).limit(number_of_edges_to_keep)
+        return pruned_edges
+
+    @staticmethod
     def wep(edges):
         """
         Performs the pruning by using the Weight Edge Pruning method
