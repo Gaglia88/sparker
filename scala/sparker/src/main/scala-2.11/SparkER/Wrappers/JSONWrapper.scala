@@ -43,9 +43,8 @@ object JSONWrapper {
           val data = obj.get(key)
           data match {
             case jsonArray: JSONArray =>
-              val it = data.asInstanceOf[JSONArray].iterator()
-              while (it.hasNext) {
-                p.addAttribute(KeyValue(key, it.next().toString))
+              for (i <- 0 until jsonArray.length) {
+                p.addAttribute(KeyValue(key, jsonArray.get(i).toString))
               }
             case _ => p.addAttribute(KeyValue(key, data.toString))
           }
